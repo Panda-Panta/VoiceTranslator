@@ -23,6 +23,8 @@
 
     powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tools\setup_whisper_runtime.ps1
 
+Whisper、Silero VAD、Kim Vocal 2 与 Hy-MT2 的官方下载链接、推荐规格和手动配置方法见 [MODEL_GUIDE.md](MODEL_GUIDE.md)。
+
 可选模型和运行时：
 
     # 较低显存占用，约 1.08 GB
@@ -33,6 +35,9 @@
 
     # 完整架构 large-v3 Q5，作为可选对比模型
     tools\setup_whisper_runtime.ps1 -Model large-v3-q5_0
+
+    # 更快、占用更低的 large-v3-turbo Q5
+    tools\setup_whisper_runtime.ps1 -Model large-v3-turbo-q5_0
 
     # AMD/Intel/NVIDIA 通用 Vulkan
     tools\setup_whisper_runtime.ps1 -Runtime vulkan

@@ -2,9 +2,9 @@
 param(
     [ValidateSet("cuda", "vulkan", "cpu")]
     [string]$Runtime = "cuda",
-    [ValidateSet("large-v2-q8_0", "large-v2-q5_0", "large-v2", "large-v3-q5_0")]
+    [ValidateSet("large-v2-q8_0", "large-v2-q5_0", "large-v2", "large-v3-q5_0", "large-v3-turbo-q5_0")]
     [string]$Model = "large-v2-q8_0",
-    [string]$CrispASRVersion = "v0.8.23",
+    [string]$CrispASRVersion = "v0.8.28",
     [string]$RuntimeRoot = "",
     [switch]$SkipAppConfig
 )
@@ -71,6 +71,7 @@ $modelFile = switch ($Model) {
     "large-v2-q8_0" { "ggml-large-v2-q8_0.bin" }
     "large-v2-q5_0" { "ggml-large-v2-q5_0.bin" }
     "large-v3-q5_0" { "ggml-large-v3-q5_0.bin" }
+    "large-v3-turbo-q5_0" { "ggml-large-v3-turbo-q5_0.bin" }
     default { "ggml-large-v2.bin" }
 }
 $whisperModel = Join-Path $modelPath $modelFile

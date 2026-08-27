@@ -20,6 +20,8 @@
 
 完整架构、模型与设置说明见 [README_VOICE_TRANSLATOR.md](README_VOICE_TRANSLATOR.md)。
 
+模型不会随标准 Release 重复打包。下载地址、推荐规格、目录结构和界面配置步骤见 [模型下载与使用指南](MODEL_GUIDE.md)。
+
 ## 许可证
 
 本项目以 GNU GPLv3-or-later 发布，详见 [LICENSE](LICENSE)。项目最初参考 [VoiceTransl](https://github.com/shinnpuru/VoiceTransl) 的产品流程重新设计；继承内容和第三方组件说明见 [NOTICE.md](NOTICE.md)。
