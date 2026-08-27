@@ -1,0 +1,20 @@
+{
+  "home": "Home",
+  "general_settings": "General settings",
+  "asr_settings": "Transcription settings",
+  "translation_settings": "Translation settings",
+  "about": "About",
+  "add_files": "Add files",
+  "remove_selected": "Remove selected",
+  "start": "Start",
+  "cancel": "Cancel",
+  "target_language": "Target language",
+  "export_format": "Export format",
+  "content_mode": "Content mode",
+  "process_mode": "Processing mode",
+  "transcribe_only": "Transcribe only",
+  "transcribe_translate": "Transcribe + translate",
+  "bilingual": "Bilingual",
+  "source_only": "Source only",
+  "target_only": "Target only"
+}

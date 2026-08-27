@@ -1,0 +1,20 @@
+{
+  "home": "首页",
+  "general_settings": "全局设置",
+  "asr_settings": "转录设置",
+  "translation_settings": "翻译设置",
+  "about": "关于",
+  "add_files": "添加文件",
+  "remove_selected": "移除选中",
+  "start": "开始处理",
+  "cancel": "取消",
+  "target_language": "目标语言",
+  "export_format": "导出格式",
+  "content_mode": "内容模式",
+  "process_mode": "处理方式",
+  "transcribe_only": "仅转录",
+  "transcribe_translate": "转录 + 翻译",
+  "bilingual": "双语",
+  "source_only": "仅原语言",
+  "target_only": "仅目标语言"
+}
