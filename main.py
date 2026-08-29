@@ -20,6 +20,7 @@ def main() -> int:
     config = store.load()
     apply_font_scale(config.ui_font_scale, application)
     window = MainWindow(config, store)
+    application.setWindowIcon(window.windowIcon())
     window.show()
     return application.exec()
 

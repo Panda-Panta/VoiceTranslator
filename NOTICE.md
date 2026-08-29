@@ -6,7 +6,7 @@ VoiceTranslator 是一个独立维护的软件项目，使用全新的 PySide6 �
 
 本项目最初参考了 [VoiceTransl](https://github.com/shinnpuru/VoiceTransl) 的产品定位和处理流程。VoiceTransl 本身基于 GalTransl，并采用 GNU GPLv3。VoiceTranslator 不包含原项目的 GalTransl 后端、插件系统、旧 PyQt5 界面、视频下载和字幕总结实现。
 
-仓库中的 `separate.py` 继承并修改了上游的 MDX ONNX 人声分离实现；`icon.png`、`icon.icns` 和部分运行时说明文件也来自上游。上述内容与本项目其余代码统一依照 GNU GPLv3-or-later 发布。
+仓库中的 `separate.py` 继承并修改了上游的 MDX ONNX 人声分离实现；部分运行时说明文件也来自上游。上述内容与本项目其余代码统一依照 GNU GPLv3-or-later 发布。当前 `icon.png`、`icon.ico` 和 `icon.icns` 是 VoiceTranslator 的项目专用图标资源。
 
 ## 主要第三方组件
 
