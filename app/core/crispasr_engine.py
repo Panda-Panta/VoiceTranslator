@@ -15,7 +15,7 @@ from app.models import TranscriptionSegment
 
 
 class CrispASREngine:
-    """Run Whisper in a short-lived CrispASR process.
+    """Run Whisper or Qwen3-ASR in a short-lived CrispASR process.
 
     The child process owns the model. Its exit is the unload barrier for RAM
     and VRAM on success, failure, and cancellation.
@@ -26,6 +26,8 @@ class CrispASREngine:
         executable: str,
         model_path: str,
         *,
+        backend: str = "whisper",
+        aligner_model_path: str = "",
         threads: int = 4,
         language: str = "auto",
         vad_enabled: bool = True,
@@ -40,6 +42,10 @@ class CrispASREngine:
     ) -> None:
         self.executable = executable
         self.model_path = model_path
+        self.backend = backend.strip() or "whisper"
+        if self.backend not in {"whisper", "qwen3-1.7b"}:
+            raise ValueError(f"不支持的 CrispASR 后端：{self.backend}")
+        self.aligner_model_path = aligner_model_path
         self.threads = max(1, threads)
         self.language = language or "auto"
         self.vad_enabled = vad_enabled
@@ -61,9 +67,13 @@ class CrispASREngine:
         executable = self._resolve_executable()
         model = Path(self.model_path)
         if not model.is_file():
-            raise FileNotFoundError(f"找不到 Whisper 模型：{model}")
+            raise FileNotFoundError(f"找不到 {self.display_name} 模型：{model}")
+        if self.is_qwen3:
+            aligner = Path(self.aligner_model_path)
+            if not aligner.is_file():
+                raise FileNotFoundError(f"找不到 Qwen3 Forced Aligner 模型：{aligner}")
 
-        with tempfile.TemporaryDirectory(prefix="voice_translator_whisper_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="voice_translator_asr_") as temp_dir:
             output_base = Path(temp_dir) / "transcript"
             command = self._build_command(executable, model, source, output_base)
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -86,17 +96,17 @@ class CrispASREngine:
                 for line in process.stdout:
                     message = line.rstrip()
                     if message:
-                        self.log_callback(f"[Whisper] {message}")
+                        self.log_callback(f"[{self.display_name}] {message}")
                 code = process.wait()
             finally:
                 with self._lock:
                     self._process = None
             if code != 0:
-                raise RuntimeError(f"Whisper 转录失败，CrispASR 退出码 {code}")
+                raise RuntimeError(f"{self.display_name} 转录失败，CrispASR 退出码 {code}")
 
             output = self._find_output(output_base)
             if output is None:
-                raise RuntimeError("Whisper 未生成 SRT 字幕文件")
+                raise RuntimeError(f"{self.display_name} 未生成 SRT 字幕文件")
             segments = SubtitleParser().parse_srt(output)
             for segment in segments:
                 segment.text = re.sub(r"[ \t]{2,}", " ", segment.text).strip()
@@ -127,11 +137,19 @@ class CrispASREngine:
             return Path(resolved)
         raise FileNotFoundError(f"找不到 CrispASR：{self.executable}")
 
+    @property
+    def is_qwen3(self) -> bool:
+        return self.backend == "qwen3-1.7b"
+
+    @property
+    def display_name(self) -> str:
+        return "Qwen3-ASR" if self.is_qwen3 else "Whisper"
+
     def _build_command(self, executable: Path, model: Path, source: Path, output_base: Path) -> list[str]:
         command = [
             str(executable),
             "--backend",
-            "whisper",
+            self.backend,
             "--model",
             str(model),
             "--file",
@@ -144,11 +162,25 @@ class CrispASREngine:
             "--output-file",
             str(output_base),
         ]
+        if self.is_qwen3:
+            command.extend(
+                [
+                    "--aligner-model",
+                    self.aligner_model_path,
+                    "--force-aligner",
+                    "--max-new-tokens",
+                    "96",
+                    "--frequency-penalty",
+                    "0.8",
+                ]
+            )
         if self.vad_enabled:
             command.extend(["--vad", "--vad-min-silence-duration-ms", str(self.vad_min_silence_ms)])
             command.extend(["--vad-speech-pad-ms", str(self.vad_speech_pad_ms)])
             if self.vad_model_path:
                 command.extend(["--vad-model", self.vad_model_path])
+            if self.is_qwen3:
+                command.extend(["--vad-max-speech-duration-s", "12"])
         if self.split_on_punctuation:
             command.append("--split-on-punct")
         command.extend(["--device", str(self.device)] if self.use_gpu else ["--no-gpu"])

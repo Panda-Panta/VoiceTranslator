@@ -184,13 +184,29 @@ class ASRSettingsInterface(SettingsPage):
         preprocessing.addRow(self.separation_enabled)
         preprocessing.addRow("直接人声提取 ONNX 模型", self.separation_model)
         self._sync_separation(self.separation_enabled.isChecked())
-        model = self.add_group("Whisper 模型")
-        self.model = PathPicker(config.asr_model_path, file_filter="Whisper 模型 (*.bin);;所有文件 (*)")
+        model = self.add_group("语音识别模型")
+        self.backend = QComboBox()
+        self.backend.addItem("Whisper", "whisper")
+        self.backend.addItem("Qwen3-ASR 1.7B + Forced Aligner", "qwen3-1.7b")
+        backend_index = self.backend.findData(config.asr_backend)
+        self.backend.setCurrentIndex(max(0, backend_index))
+        self.model = PathPicker(
+            config.asr_model_path,
+            file_filter="语音识别模型 (*.bin *.gguf);;所有文件 (*)",
+        )
+        self.aligner_model = PathPicker(
+            config.asr_aligner_model_path,
+            file_filter="Qwen3 Forced Aligner (*.gguf);;所有文件 (*)",
+        )
         self.model_detected = QLabel()
         self.model.edit.textChanged.connect(self._sync_model_label)
+        self.backend.currentIndexChanged.connect(self._sync_backend)
         self._sync_model_label(config.asr_model_path)
-        model.addRow("Whisper 模型路径", self.model)
+        model.addRow("转录后端", self.backend)
+        model.addRow("主模型路径", self.model)
+        model.addRow("Forced Aligner 模型", self.aligner_model)
         model.addRow("自动识别规格", self.model_detected)
+        self._sync_backend()
         inference = self.add_group("推理参数")
         self.gpu = self._spin(0, 999, config.asr_gpu_layers)
         self.threads = self._spin(1, 32, config.asr_threads)
@@ -242,7 +258,9 @@ class ASRSettingsInterface(SettingsPage):
     def _save(self) -> None:
         self.config.vocal_separation_enabled = self.separation_enabled.isChecked()
         self.config.vocal_separation_model_path = self.separation_model.text()
+        self.config.asr_backend = str(self.backend.currentData())
         self.config.asr_model_path = self.model.text()
+        self.config.asr_aligner_model_path = self.aligner_model.text()
         self.config.asr_gpu_layers = self.gpu.value()
         self.config.asr_threads = self.threads.value()
         self.config.asr_device = self.device.value()
@@ -268,6 +286,15 @@ class ASRSettingsInterface(SettingsPage):
         if name.lower().startswith("ggml-"):
             name = name[5:]
         self.model_detected.setText(name or "未选择模型")
+
+    def _sync_backend(self, _index: int = 0) -> None:
+        is_qwen3 = self.backend.currentData() == "qwen3-1.7b"
+        self.aligner_model.setEnabled(is_qwen3)
+        if is_qwen3:
+            self.model.edit.setPlaceholderText("选择 qwen3-asr-1.7b-*.gguf")
+            self.aligner_model.edit.setPlaceholderText("选择 qwen3-forced-aligner-0.6b-*.gguf")
+        else:
+            self.model.edit.setPlaceholderText("选择 ggml-large-v2-*.bin")
 
 
 class TranslationSettingsInterface(SettingsPage):
@@ -360,7 +387,7 @@ class AboutInterface(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 36, 40, 36)
         layout.addWidget(SubtitleLabel(f"{APP_NAME} {APP_VERSION}"))
-        description = QLabel("本地化优先的 AI 音视频转录与翻译工具\nWhisper · CrispASR · llama.cpp · OpenAI 兼容 API")
+        description = QLabel("本地化优先的 AI 音视频转录与翻译工具\nWhisper · Qwen3-ASR · CrispASR · llama.cpp · OpenAI 兼容 API")
         description.setWordWrap(True)
         layout.addWidget(description)
         license_label = QLabel("独立维护的本地转录与翻译软件，遵循 GNU GPLv3。\n关键依赖：PySide6、QFluentWidgets、CrispASR、FFmpeg、llama.cpp。")

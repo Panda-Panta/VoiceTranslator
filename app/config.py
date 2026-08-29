@@ -43,7 +43,9 @@ class AppConfig:
 
     llama_server_path: str = "llama-server"
     crispasr_path: str = "crispasr"
+    asr_backend: str = "whisper"
     asr_model_path: str = ""
+    asr_aligner_model_path: str = ""
     asr_gpu_layers: int = 999
     asr_threads: int = max(1, min(32, os.cpu_count() or 4))
     asr_timestamps: bool = True
@@ -78,11 +80,13 @@ class AppConfig:
 
 
 def resolve_whisper_runtime(config: AppConfig, roots: list[Path] | None = None) -> bool:
-    """Repair stale/default ASR paths from an installed runtime manifest."""
+    """Repair CrispASR/runtime paths without replacing a selected Qwen3 model."""
+    is_whisper = config.asr_backend == "whisper"
     executable_ok = Path(config.crispasr_path).is_file()
     model_ok = Path(config.asr_model_path).is_file()
     vad_ok = not config.asr_vad_enabled or Path(config.asr_vad_model_path).is_file()
-    if executable_ok and model_ok and vad_ok:
+    aligner_ok = is_whisper or Path(config.asr_aligner_model_path).is_file()
+    if executable_ok and model_ok and vad_ok and aligner_ok:
         return False
 
     for root in roots or _application_roots():
@@ -96,10 +100,17 @@ def resolve_whisper_runtime(config: AppConfig, roots: list[Path] | None = None) 
             vad = Path(str(manifest["vad_model_path"]))
         except (OSError, ValueError, TypeError, KeyError):
             continue
-        if executable.is_file() and model.is_file() and vad.is_file():
+        changed = False
+        if not executable_ok and executable.is_file():
             config.crispasr_path = str(executable)
+            changed = True
+        if is_whisper and not model_ok and model.is_file():
             config.asr_model_path = str(model)
+            changed = True
+        if config.asr_vad_enabled and not vad_ok and vad.is_file():
             config.asr_vad_model_path = str(vad)
+            changed = True
+        if changed:
             config.asr_timestamps = True
             return True
     return False

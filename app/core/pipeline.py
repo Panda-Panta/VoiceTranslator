@@ -188,13 +188,17 @@ class ProcessingPipeline:
     def _transcribe_all(self, items: list[_WorkItem], source_language: str = "自动检测") -> None:
         resolve_whisper_runtime(self.config)
         if not self.config.asr_model_path:
-            raise ValueError("未找到 Whisper 模型，请运行 tools/setup_whisper_runtime.ps1")
+            raise ValueError(f"未选择 {self._asr_display_name()} 模型")
+        if self.config.asr_backend == "qwen3-1.7b" and not self.config.asr_aligner_model_path:
+            raise ValueError("未选择 Qwen3 Forced Aligner 模型")
         self._transcribe_all_whisper(items, source_language)
 
     def _transcribe_all_whisper(self, items: list[_WorkItem], source_language: str) -> None:
         engine = self.crispasr_factory(
             executable=self.config.crispasr_path,
             model_path=self.config.asr_model_path,
+            backend=self.config.asr_backend,
+            aligner_model_path=self.config.asr_aligner_model_path,
             threads=self.config.asr_threads,
             language=self._asr_language(source_language),
             vad_enabled=self.config.asr_vad_enabled,
@@ -208,11 +212,12 @@ class ProcessingPipeline:
             log_callback=self.on_log,
         )
         self._active_asr = engine
-        self.on_progress(15, "正在加载 Whisper 模型")
+        display_name = self._asr_display_name()
+        self.on_progress(15, f"正在加载 {display_name} 模型")
         try:
             for index, item in enumerate(items, 1):
                 self._check_cancelled()
-                self.on_log(f"正在使用 Whisper 转录：{item.source.name}")
+                self.on_log(f"正在使用 {display_name} 转录：{item.source.name}")
                 item.segments = engine.transcribe(str(item.audio_path), timestamps=True)
                 if not item.segments:
                     raise RuntimeError(f"转录结果为空：{item.source.name}")
@@ -228,6 +233,9 @@ class ProcessingPipeline:
         finally:
             engine.stop()
             self._active_asr = None
+
+    def _asr_display_name(self) -> str:
+        return "Qwen3-ASR" if self.config.asr_backend == "qwen3-1.7b" else "Whisper"
 
     @staticmethod
     def _asr_language(value: str) -> str:

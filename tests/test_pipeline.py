@@ -146,6 +146,36 @@ def test_pipeline_unloads_model_when_asr_raises(tmp_path: Path) -> None:
     assert events == ["start:asr:asr.gguf", "stop:asr"]
 
 
+def test_pipeline_passes_qwen3_backend_and_aligner(tmp_path: Path) -> None:
+    audio = tmp_path / "sample.wav"
+    model = tmp_path / "qwen3-asr.gguf"
+    aligner = tmp_path / "qwen3-forced-aligner.gguf"
+    audio.touch()
+    model.touch()
+    aligner.touch()
+    captured: dict[str, object] = {}
+
+    class CapturingASR(FakeASR):
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def stop(self) -> None:
+            pass
+
+    pipeline = ProcessingPipeline(
+        AppConfig(
+            asr_backend="qwen3-1.7b",
+            asr_model_path=str(model),
+            asr_aligner_model_path=str(aligner),
+            asr_vad_enabled=False,
+        ),
+        crispasr_factory=CapturingASR,  # type: ignore[arg-type]
+    )
+    pipeline.run(ProcessingTask(input_files=[str(audio)], process_mode=ProcessMode.TRANSCRIBE_ONLY))
+    assert captured["backend"] == "qwen3-1.7b"
+    assert captured["aligner_model_path"] == str(aligner)
+
+
 def test_vocal_separation_finishes_before_asr_load(tmp_path: Path) -> None:
     audio = tmp_path / "mixed.wav"
     asr_model = tmp_path / "asr.gguf"

@@ -6,6 +6,7 @@ GitHub 标准 Release 包含 VoiceTranslator 程序及对应平台的 CrispASR�
 VoiceTranslator/
 ├─ models/
 │  ├─ whisper/
+│  ├─ qwen3-asr/
 │  ├─ separation/
 │  └─ translation/
 └─ runtime/
@@ -35,6 +36,29 @@ AMD、Intel 或不想依赖 CUDA 的用户可将 `-Runtime cuda` 改为 `-Runtim
 
 手动下载后，在“转录设置 → Whisper 模型路径”中选择 `.bin` 文件。模型规格会从文件名自动识别，不需要再单独选择。
 
+## Qwen3-ASR 与 Forced Aligner
+
+VoiceTranslator 通过 CrispASR 的 `qwen3-1.7b` 后端运行 Qwen3-ASR，并使用独立的 Qwen3 Forced Aligner 生成 SRT 时间轴。模型体系说明可参考 [Qwen3-ASR 官方仓库](https://github.com/QwenLM/Qwen3-ASR)；GGUF 运行时和命令行能力见 [CrispASR](https://github.com/CrispStrobe/CrispASR)。
+
+当前已验证以下本地模型：
+
+| 模型 | 大小 | 建议用途 |
+|---|---:|---|
+| `qwen3-asr-1.7b-ja-anime-q8_0.gguf` | 2.51 GB | 6 GB 显存质量优先，默认推荐 |
+| `qwen3-asr-1.7b-ja-anime-q4_k.gguf` | 1.49 GB | 更快、显存占用更低 |
+| `qwen3-forced-aligner-0.6b-q8_0.gguf` | 986 MB | Q8 主模型推荐搭配 |
+| `qwen3-forced-aligner-0.6b-q4_k.gguf` | 529 MB | 低显存搭配 |
+
+配置方法：
+
+1. 打开“转录设置”，将“转录后端”切换为“Qwen3-ASR 1.7B + Forced Aligner”。
+2. “主模型路径”选择 `qwen3-asr-1.7b-*.gguf`。
+3. “Forced Aligner 模型”选择 `qwen3-forced-aligner-0.6b-*.gguf`。
+4. 保持 Silero VAD 启用；Qwen3 Forced Aligner 对开头静音更敏感。
+5. 6 GB 显存已实测 Q8 主模型与 Q8 Aligner 可运行；如果长音频显存不足，改用 Q4 主模型和 Q4 Aligner。
+
+Qwen3-ASR、Forced Aligner、Whisper 与翻译模型均由短生命周期子进程持有，阶段完成、失败、取消或退出时都会停止进程并释放模型。
+
 ## Silero VAD
 
 下载 [ggml-silero-v6.2.0.bin](https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin)，然后在“转录设置 → VAD 模型路径”中选择该文件，并启用 VAD。
@@ -53,8 +77,8 @@ models\separation\Kim_Vocal_2.onnx
 
 1. 勾选“自动人声分离”。
 2. 在“直接人声提取 ONNX 模型”中选择 `Kim_Vocal_2.onnx`。
-3. 正常开始转录。软件会把模型的人声输出送入 Whisper，而不是把伴奏输出送入识别器。
-4. 全部音频分离完成后，ONNX 子进程会退出并释放模型，再加载 Whisper。
+3. 正常开始转录。软件会把模型的人声输出送入当前选择的 ASR 后端，而不是把伴奏输出送入识别器。
+4. 全部音频分离完成后，ONNX 子进程会退出并释放模型，再加载 Whisper 或 Qwen3-ASR。
 
 ## Hy-MT2 本地翻译模型
 
@@ -76,7 +100,7 @@ models\separation\Kim_Vocal_2.onnx
 
 ## 最小推荐组合
 
-- Whisper：`ggml-large-v2-q8_0.bin`
+- 转录（二选一）：`ggml-large-v2-q8_0.bin`，或 Qwen3-ASR Q8 + Forced Aligner Q8
 - VAD：`ggml-silero-v6.2.0.bin`
 - 强背景音乐：`Kim_Vocal_2.onnx`
 - 本地翻译：`Hy-MT2-1.8B-Q8_0.gguf`

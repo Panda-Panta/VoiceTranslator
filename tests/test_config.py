@@ -49,6 +49,27 @@ def test_valid_custom_whisper_paths_are_not_overwritten(tmp_path: Path) -> None:
     assert config.asr_model_path == str(model)
 
 
+def test_qwen3_paths_are_not_replaced_by_whisper_runtime(tmp_path: Path) -> None:
+    runtime_executable, _whisper_model, runtime_vad = _install_runtime(tmp_path)
+    qwen_model = tmp_path / "qwen3-asr.gguf"
+    aligner = tmp_path / "qwen3-forced-aligner.gguf"
+    qwen_model.touch()
+    aligner.touch()
+    config = AppConfig(
+        crispasr_path="missing-crispasr.exe",
+        asr_backend="qwen3-1.7b",
+        asr_model_path=str(qwen_model),
+        asr_aligner_model_path=str(aligner),
+        asr_vad_model_path="missing-vad.bin",
+    )
+
+    assert resolve_whisper_runtime(config, [tmp_path])
+    assert config.crispasr_path == str(runtime_executable)
+    assert config.asr_model_path == str(qwen_model)
+    assert config.asr_aligner_model_path == str(aligner)
+    assert config.asr_vad_model_path == str(runtime_vad)
+
+
 def test_separation_manifest_fills_official_onnx_model(tmp_path: Path) -> None:
     runtime = tmp_path / "runtime" / "separation"
     mdx = runtime / "models" / "model.onnx"

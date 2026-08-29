@@ -111,11 +111,12 @@ if (-not $SkipAppConfig) {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $configPath) | Out-Null
     }
     Set-ConfigValue $config "crispasr_path" $crispasrExe.FullName
+    Set-ConfigValue $config "asr_backend" "whisper"
     Set-ConfigValue $config "asr_model_path" $whisperModel
+    Set-ConfigValue $config "asr_aligner_model_path" ""
     Set-ConfigValue $config "asr_vad_enabled" $true
     Set-ConfigValue $config "asr_vad_model_path" $vadModel
     Set-ConfigValue $config "asr_timestamps" $true
-    $config.PSObject.Properties.Remove("asr_backend")
     $config.PSObject.Properties.Remove("asr_mmproj_path")
     $config.PSObject.Properties.Remove("asr_port")
     $config.PSObject.Properties.Remove("asr_model_size")

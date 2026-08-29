@@ -100,7 +100,9 @@ try {
         open_output_directory = $false
         llama_server_path = "runtime\llama\llama-server.exe"
         crispasr_path = "runtime\whisper\bin\crispasr.exe"
+        asr_backend = "whisper"
         asr_model_path = "models\whisper\ggml-large-v2-q8_0.bin"
+        asr_aligner_model_path = ""
         asr_gpu_layers = 999
         asr_threads = 20
         asr_timestamps = $true
