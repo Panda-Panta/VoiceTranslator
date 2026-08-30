@@ -287,6 +287,10 @@ crispasr_path
 llama_server_path
 output_directory_mode = source | custom
 output_directory
+background_enabled
+background_image_path
+background_scale_mode = cover | contain | stretch | tile
+background_opacity = 0..100
 
 vocal_separation_enabled
 vocal_separation_model_path

@@ -34,6 +34,10 @@ class AppConfig:
     theme: str = "system"
     theme_color: str = "#009faa"
     ui_font_scale: int = 125
+    background_enabled: bool = False
+    background_image_path: str = ""
+    background_scale_mode: str = "cover"
+    background_opacity: int = 30
     language: str = "zh_CN"
     ffmpeg_path: str = "ffmpeg"
     output_directory: str = ""

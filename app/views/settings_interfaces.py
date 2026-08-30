@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
@@ -70,12 +70,14 @@ class SettingsPage(QScrollArea):
         self.store = store
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.NoFrame)
+        self.viewport().setAutoFillBackground(False)
         content = QWidget()
         self.root = QVBoxLayout(content)
         self.root.setContentsMargins(28, 24, 28, 24)
         self.root.setSpacing(16)
         self.root.addWidget(SubtitleLabel(title))
         self.setWidget(content)
+        content.setAutoFillBackground(False)
 
     def add_group(self, title: str) -> QFormLayout:
         card = CardWidget()
@@ -101,6 +103,8 @@ class SettingsPage(QScrollArea):
 
 
 class GeneralSettingsInterface(SettingsPage):
+    appearanceChanged = Signal()
+
     def __init__(self, config: AppConfig, store: ConfigStore) -> None:
         super().__init__("全局设置", config, store)
         self.setObjectName("generalSettingsInterface")
@@ -118,10 +122,34 @@ class GeneralSettingsInterface(SettingsPage):
         self.font_scale.setSingleStep(5)
         self.font_scale.setSuffix("%")
         self.font_scale.setValue(config.ui_font_scale)
+        self.background_enabled = QCheckBox("启用自定义背景图")
+        self.background_enabled.setChecked(config.background_enabled)
+        self.background_image = PathPicker(
+            config.background_image_path,
+            file_filter="图片文件 (*.png *.jpg *.jpeg *.webp *.bmp);;所有文件 (*)",
+        )
+        self.background_scale = QComboBox()
+        self.background_scale.addItem("填充窗口（保持比例并裁剪）", "cover")
+        self.background_scale.addItem("适应窗口（完整显示）", "contain")
+        self.background_scale.addItem("拉伸到窗口", "stretch")
+        self.background_scale.addItem("平铺", "tile")
+        background_scale_index = self.background_scale.findData(config.background_scale_mode)
+        self.background_scale.setCurrentIndex(max(0, background_scale_index))
+        self.background_opacity = QSpinBox()
+        self.background_opacity.setRange(0, 100)
+        self.background_opacity.setSuffix("%")
+        self.background_opacity.setValue(config.background_opacity)
+        self.background_opacity.setToolTip("0% 为完全透明，100% 为完全不透明")
+        self.background_enabled.toggled.connect(self._sync_background)
         appearance.addRow("主题模式", self.theme)
         appearance.addRow("主题色", self.theme_color)
         appearance.addRow("字体比例", self.font_scale)
         appearance.addRow("界面语言（重启后生效）", self.language)
+        appearance.addRow(self.background_enabled)
+        appearance.addRow("背景图片", self.background_image)
+        appearance.addRow("缩放方式", self.background_scale)
+        appearance.addRow("背景图不透明度", self.background_opacity)
+        self._sync_background()
         paths = self.add_group("路径")
         self.server = PathPicker(config.llama_server_path, file_filter="llama-server (llama-server.exe);;所有文件 (*)")
         self.crispasr = PathPicker(config.crispasr_path, file_filter="CrispASR (crispasr.exe);;所有文件 (*)")
@@ -154,10 +182,24 @@ class GeneralSettingsInterface(SettingsPage):
     def _sync_output_mode(self) -> None:
         self.output.setEnabled(self.output_mode.currentIndex() == 1)
 
+    def _sync_background(self, _checked: bool = False) -> None:
+        enabled = self.background_enabled.isChecked()
+        self.background_image.setEnabled(enabled)
+        self.background_scale.setEnabled(enabled)
+        self.background_opacity.setEnabled(enabled)
+
     def _save(self) -> None:
+        background_path = self.background_image.text()
+        if self.background_enabled.isChecked() and not Path(background_path).expanduser().is_file():
+            InfoBar.warning("背景图不可用", "请选择有效的背景图片文件", parent=self, position=InfoBarPosition.TOP)
+            return
         self.config.theme = ["system", "light", "dark"][self.theme.currentIndex()]
         self.config.theme_color = self.theme_color.text()
         self.config.ui_font_scale = self.font_scale.value()
+        self.config.background_enabled = self.background_enabled.isChecked()
+        self.config.background_image_path = background_path
+        self.config.background_scale_mode = str(self.background_scale.currentData())
+        self.config.background_opacity = self.background_opacity.value()
         self.config.language = "en_US" if self.language.currentIndex() else "zh_CN"
         self.config.llama_server_path = self.server.text() or "llama-server"
         self.config.crispasr_path = self.crispasr.text() or "crispasr"
@@ -168,6 +210,7 @@ class GeneralSettingsInterface(SettingsPage):
         self.config.open_output_directory = self.open_output.isChecked()
         self.saved()
         apply_font_scale(self.config.ui_font_scale)
+        self.appearanceChanged.emit()
 
 
 class ASRSettingsInterface(SettingsPage):

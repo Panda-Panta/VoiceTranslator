@@ -92,6 +92,10 @@ try {
         theme = "system"
         theme_color = "#009faa"
         ui_font_scale = 125
+        background_enabled = $false
+        background_image_path = ""
+        background_scale_mode = "cover"
+        background_opacity = 30
         language = "zh_CN"
         ffmpeg_path = "runtime\ffmpeg\ffmpeg.exe"
         output_directory = ""
