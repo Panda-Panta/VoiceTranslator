@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 APP_NAME = "VoiceTranslator"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 PROJECT_REPOSITORY_URL = "https://github.com/Panda-Panta/VoiceTranslator"
 UPSTREAM_REPOSITORY_URL = "https://github.com/shinnpuru/VoiceTransl"
 

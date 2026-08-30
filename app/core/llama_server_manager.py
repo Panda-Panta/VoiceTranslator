@@ -10,6 +10,8 @@ from typing import Callable
 
 import requests
 
+from app.common.text_encoding import iter_decoded_lines
+
 
 class LlamaServerManager:
     """Owns one llama-server process and guarantees deterministic model unloading."""
@@ -23,7 +25,7 @@ class LlamaServerManager:
         self.executable = executable
         self.host = host
         self.log_callback = log_callback or (lambda _message: None)
-        self.process: subprocess.Popen[str] | None = None
+        self.process: subprocess.Popen[bytes] | None = None
         self.port: int | None = None
         self._reader: threading.Thread | None = None
 
@@ -75,10 +77,6 @@ class LlamaServerManager:
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
                 creationflags=creationflags,
             )
         except FileNotFoundError as exc:
@@ -103,7 +101,7 @@ class LlamaServerManager:
         process = self.process
         if process is None or process.stdout is None:
             return
-        for line in iter(process.stdout.readline, ""):
+        for line in iter_decoded_lines(process.stdout):
             message = line.rstrip()
             if message:
                 self.log_callback(f"[llama-server] {message}")

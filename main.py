@@ -4,6 +4,10 @@ import os
 import sys
 from pathlib import Path
 
+from app.common.text_encoding import configure_utf8_stdio
+
+configure_utf8_stdio()
+
 from PySide6.QtWidgets import QApplication
 
 from app.config import ConfigStore

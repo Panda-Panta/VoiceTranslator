@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from app.common.constants import AUDIO_EXTENSIONS, LYRICS_EXTENSIONS, SUBTITLE_EXTENSIONS, VIDEO_EXTENSIONS
+from app.common.text_encoding import decode_process_output
 from app.models import FileType
 
 
@@ -57,11 +58,12 @@ class FileHandler:
             str(target),
         ]
         try:
-            subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=True)
         except FileNotFoundError as exc:
             raise RuntimeError(f"未找到 FFmpeg：{self.ffmpeg_path}") from exc
         except subprocess.CalledProcessError as exc:
-            message = (exc.stderr or exc.stdout or str(exc)).strip()
+            raw_message = exc.stderr or exc.stdout
+            message = decode_process_output(raw_message).strip() if raw_message else str(exc)
             raise RuntimeError(f"FFmpeg 音频提取失败：{message}") from exc
         if not target.is_file() or target.stat().st_size == 0:
             raise RuntimeError("FFmpeg 未生成有效音频文件")

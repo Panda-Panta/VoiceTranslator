@@ -7,6 +7,8 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+from app.common.text_encoding import decode_process_output
+
 
 class VocalSeparator:
     """Run the bundled UVR/MDX separator in an isolated process."""
@@ -20,7 +22,7 @@ class VocalSeparator:
         self.model_path = Path(model_path).expanduser()
         self.log_callback = log_callback or (lambda _message: None)
         self.project_root = Path(project_root) if project_root else Path(__file__).resolve().parents[2]
-        self.process: subprocess.Popen[str] | None = None
+        self.process: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
 
     def separate_many(self, audio_paths: list[str | Path]) -> list[Path]:
@@ -43,13 +45,11 @@ class VocalSeparator:
                     env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
                     creationflags=creationflags,
                 )
                 process = self.process
-            output, _ = process.communicate()
+            output_bytes, _ = process.communicate()
+            output = decode_process_output(output_bytes)
             if output.strip():
                 for line in output.splitlines():
                     self.log_callback(f"[人声分离] {line}")

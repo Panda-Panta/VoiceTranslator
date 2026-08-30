@@ -10,6 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from shutil import which
 
+from app.common.text_encoding import iter_decoded_lines
 from app.core.subtitle_parser import SubtitleParser
 from app.models import TranscriptionSegment
 
@@ -57,7 +58,7 @@ class CrispASREngine:
         self.use_gpu = use_gpu
         self.extra_args = extra_args
         self.log_callback = log_callback or (lambda _message: None)
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
 
     def transcribe(self, audio_path: str, timestamps: bool = True) -> list[TranscriptionSegment]:
@@ -82,9 +83,6 @@ class CrispASREngine:
                     command,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
                     creationflags=creationflags,
                 )
             except OSError as exc:
@@ -93,7 +91,7 @@ class CrispASREngine:
                 self._process = process
             try:
                 assert process.stdout is not None
-                for line in process.stdout:
+                for line in iter_decoded_lines(process.stdout):
                     message = line.rstrip()
                     if message:
                         self.log_callback(f"[{self.display_name}] {message}")
