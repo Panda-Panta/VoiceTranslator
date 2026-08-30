@@ -101,8 +101,9 @@ try {
         llama_server_path = "runtime\llama\llama-server.exe"
         crispasr_path = "runtime\whisper\bin\crispasr.exe"
         asr_backend = "whisper"
-        asr_model_path = "models\whisper\ggml-large-v2-q8_0.bin"
-        asr_aligner_model_path = ""
+        asr_whisper_model_path = "models\whisper\ggml-large-v2-q8_0.bin"
+        asr_qwen3_model_path = ""
+        asr_qwen3_aligner_model_path = ""
         asr_gpu_layers = 999
         asr_threads = 20
         asr_timestamps = $true
@@ -117,7 +118,8 @@ try {
         subtitle_max_duration = 6.0
         subtitle_merge_gap_ms = 250
         asr_device = 0
-        asr_extra_args = ""
+        asr_whisper_extra_args = ""
+        asr_qwen3_extra_args = ""
         vocal_separation_enabled = $true
         vocal_separation_model_path = "models\separation\Kim_Vocal_2.onnx"
         translation_engine = "local"

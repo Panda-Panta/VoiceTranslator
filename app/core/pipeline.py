@@ -187,18 +187,26 @@ class ProcessingPipeline:
 
     def _transcribe_all(self, items: list[_WorkItem], source_language: str = "自动检测") -> None:
         resolve_whisper_runtime(self.config)
-        if not self.config.asr_model_path:
+        model_path = self.config.selected_asr_model_path()
+        aligner_model_path = self.config.selected_asr_aligner_model_path()
+        if not model_path:
             raise ValueError(f"未选择 {self._asr_display_name()} 模型")
-        if self.config.asr_backend == "qwen3-1.7b" and not self.config.asr_aligner_model_path:
+        if self.config.asr_backend == "qwen3-1.7b" and not aligner_model_path:
             raise ValueError("未选择 Qwen3 Forced Aligner 模型")
-        self._transcribe_all_whisper(items, source_language)
+        self._transcribe_all_whisper(items, source_language, model_path, aligner_model_path)
 
-    def _transcribe_all_whisper(self, items: list[_WorkItem], source_language: str) -> None:
+    def _transcribe_all_whisper(
+        self,
+        items: list[_WorkItem],
+        source_language: str,
+        model_path: str,
+        aligner_model_path: str,
+    ) -> None:
         engine = self.crispasr_factory(
             executable=self.config.crispasr_path,
-            model_path=self.config.asr_model_path,
+            model_path=model_path,
             backend=self.config.asr_backend,
-            aligner_model_path=self.config.asr_aligner_model_path,
+            aligner_model_path=aligner_model_path,
             threads=self.config.asr_threads,
             language=self._asr_language(source_language),
             vad_enabled=self.config.asr_vad_enabled,
@@ -208,7 +216,7 @@ class ProcessingPipeline:
             split_on_punctuation=self.config.asr_split_on_punctuation,
             device=self.config.asr_device,
             use_gpu=self.config.asr_gpu_layers != 0,
-            extra_args=self.config.asr_extra_args,
+            extra_args=self.config.selected_asr_extra_args(),
             log_callback=self.on_log,
         )
         self._active_asr = engine

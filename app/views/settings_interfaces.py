@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -190,24 +191,53 @@ class ASRSettingsInterface(SettingsPage):
         self.backend.addItem("Qwen3-ASR 1.7B + Forced Aligner", "qwen3-1.7b")
         backend_index = self.backend.findData(config.asr_backend)
         self.backend.setCurrentIndex(max(0, backend_index))
-        self.model = PathPicker(
-            config.asr_model_path,
-            file_filter="语音识别模型 (*.bin *.gguf);;所有文件 (*)",
+
+        self.whisper_model = PathPicker(
+            config.asr_whisper_model_path,
+            file_filter="Whisper 模型 (*.bin);;所有文件 (*)",
         )
+        self.whisper_model.edit.setPlaceholderText("选择 ggml-large-v2-*.bin")
+        self.whisper_model_detected = QLabel()
+        self.whisper_model.edit.textChanged.connect(
+            lambda value: self._sync_model_label(self.whisper_model_detected, value)
+        )
+        self._sync_model_label(self.whisper_model_detected, config.asr_whisper_model_path)
+        whisper_panel = QWidget()
+        whisper_form = QFormLayout(whisper_panel)
+        whisper_form.setContentsMargins(0, 0, 0, 0)
+        whisper_form.addRow("Whisper 模型", self.whisper_model)
+        whisper_form.addRow("自动识别规格", self.whisper_model_detected)
+
+        self.qwen_model = PathPicker(
+            config.asr_qwen3_model_path,
+            file_filter="Qwen3-ASR 模型 (*.gguf);;所有文件 (*)",
+        )
+        self.qwen_model.edit.setPlaceholderText("选择 qwen3-asr-1.7b-*.gguf")
         self.aligner_model = PathPicker(
-            config.asr_aligner_model_path,
+            config.asr_qwen3_aligner_model_path,
             file_filter="Qwen3 Forced Aligner (*.gguf);;所有文件 (*)",
         )
-        self.model_detected = QLabel()
-        self.model.edit.textChanged.connect(self._sync_model_label)
+        self.aligner_model.edit.setPlaceholderText("选择 qwen3-forced-aligner-0.6b-*.gguf")
+        self.qwen_model_detected = QLabel()
+        self.qwen_model.edit.textChanged.connect(
+            lambda value: self._sync_model_label(self.qwen_model_detected, value)
+        )
+        self._sync_model_label(self.qwen_model_detected, config.asr_qwen3_model_path)
+        qwen_panel = QWidget()
+        qwen_form = QFormLayout(qwen_panel)
+        qwen_form.setContentsMargins(0, 0, 0, 0)
+        qwen_form.addRow("Qwen3-ASR 主模型", self.qwen_model)
+        qwen_form.addRow("Forced Aligner 对齐模型", self.aligner_model)
+        qwen_form.addRow("自动识别规格", self.qwen_model_detected)
+
+        self.model_stack = QStackedWidget()
+        self.model_stack.addWidget(whisper_panel)
+        self.model_stack.addWidget(qwen_panel)
         self.backend.currentIndexChanged.connect(self._sync_backend)
-        self._sync_model_label(config.asr_model_path)
         model.addRow("转录后端", self.backend)
-        model.addRow("主模型路径", self.model)
-        model.addRow("Forced Aligner 模型", self.aligner_model)
-        model.addRow("自动识别规格", self.model_detected)
+        model.addRow(self.model_stack)
         self._sync_backend()
-        inference = self.add_group("推理参数")
+        inference = self.add_group("通用推理参数")
         self.gpu = self._spin(0, 999, config.asr_gpu_layers)
         self.threads = self._spin(1, 32, config.asr_threads)
         self.device = self._spin(0, 31, config.asr_device)
@@ -243,9 +273,22 @@ class ASRSettingsInterface(SettingsPage):
         segmentation.addRow("每条最大字符数", self.subtitle_max_chars)
         segmentation.addRow("每条最长时间（秒）", self.subtitle_max_duration)
         segmentation.addRow("合并短句间隔（毫秒）", self.subtitle_merge_gap)
-        advanced = self.add_group("高级")
-        self.extra = QLineEdit(config.asr_extra_args)
-        advanced.addRow("自定义启动参数", self.extra)
+        advanced = self.add_group("后端高级参数")
+        self.whisper_extra = QLineEdit(config.asr_whisper_extra_args)
+        self.qwen_extra = QLineEdit(config.asr_qwen3_extra_args)
+        whisper_advanced = QWidget()
+        whisper_advanced_form = QFormLayout(whisper_advanced)
+        whisper_advanced_form.setContentsMargins(0, 0, 0, 0)
+        whisper_advanced_form.addRow("Whisper 自定义启动参数", self.whisper_extra)
+        qwen_advanced = QWidget()
+        qwen_advanced_form = QFormLayout(qwen_advanced)
+        qwen_advanced_form.setContentsMargins(0, 0, 0, 0)
+        qwen_advanced_form.addRow("Qwen3-ASR 自定义启动参数", self.qwen_extra)
+        self.extra_stack = QStackedWidget()
+        self.extra_stack.addWidget(whisper_advanced)
+        self.extra_stack.addWidget(qwen_advanced)
+        advanced.addRow(self.extra_stack)
+        self._sync_backend()
         self.finish(self._save)
 
     @staticmethod
@@ -259,8 +302,9 @@ class ASRSettingsInterface(SettingsPage):
         self.config.vocal_separation_enabled = self.separation_enabled.isChecked()
         self.config.vocal_separation_model_path = self.separation_model.text()
         self.config.asr_backend = str(self.backend.currentData())
-        self.config.asr_model_path = self.model.text()
-        self.config.asr_aligner_model_path = self.aligner_model.text()
+        self.config.asr_whisper_model_path = self.whisper_model.text()
+        self.config.asr_qwen3_model_path = self.qwen_model.text()
+        self.config.asr_qwen3_aligner_model_path = self.aligner_model.text()
         self.config.asr_gpu_layers = self.gpu.value()
         self.config.asr_threads = self.threads.value()
         self.config.asr_device = self.device.value()
@@ -274,27 +318,27 @@ class ASRSettingsInterface(SettingsPage):
         self.config.subtitle_max_chars = self.subtitle_max_chars.value()
         self.config.subtitle_max_duration = self.subtitle_max_duration.value()
         self.config.subtitle_merge_gap_ms = self.subtitle_merge_gap.value()
-        self.config.asr_extra_args = self.extra.text().strip()
+        self.config.asr_whisper_extra_args = self.whisper_extra.text().strip()
+        self.config.asr_qwen3_extra_args = self.qwen_extra.text().strip()
         self.saved()
 
     def _sync_separation(self, _value: int | bool = False) -> None:
         enabled = self.separation_enabled.isChecked()
         self.separation_model.setEnabled(enabled)
 
-    def _sync_model_label(self, value: str) -> None:
+    @staticmethod
+    def _sync_model_label(label: QLabel, value: str) -> None:
         name = Path(value.strip()).stem
         if name.lower().startswith("ggml-"):
             name = name[5:]
-        self.model_detected.setText(name or "未选择模型")
+        label.setText(name or "未选择模型")
 
     def _sync_backend(self, _index: int = 0) -> None:
         is_qwen3 = self.backend.currentData() == "qwen3-1.7b"
-        self.aligner_model.setEnabled(is_qwen3)
-        if is_qwen3:
-            self.model.edit.setPlaceholderText("选择 qwen3-asr-1.7b-*.gguf")
-            self.aligner_model.edit.setPlaceholderText("选择 qwen3-forced-aligner-0.6b-*.gguf")
-        else:
-            self.model.edit.setPlaceholderText("选择 ggml-large-v2-*.bin")
+        index = 1 if is_qwen3 else 0
+        self.model_stack.setCurrentIndex(index)
+        if hasattr(self, "extra_stack"):
+            self.extra_stack.setCurrentIndex(index)
 
 
 class TranslationSettingsInterface(SettingsPage):

@@ -293,13 +293,16 @@ vocal_separation_model_path
 vocal_separation_model_target = instrumental | vocals
 
 asr_backend
-asr_model_path
+asr_whisper_model_path
+asr_qwen3_model_path
+asr_qwen3_aligner_model_path
 asr_language
 asr_vad_enabled
 asr_vad_model_path
 asr_vad_min_silence_ms
 asr_device
-asr_extra_args
+asr_whisper_extra_args
+asr_qwen3_extra_args
 
 translation_engine = local | online
 translation_model_path

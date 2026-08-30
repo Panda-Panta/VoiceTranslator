@@ -12,7 +12,7 @@ from app.config import ConfigStore
 def main() -> int:
     config = ConfigStore().load()
     executable = Path(config.crispasr_path)
-    model = Path(config.asr_model_path)
+    model = Path(config.asr_whisper_model_path)
     vad = Path(config.asr_vad_model_path)
     for label, path in (("CrispASR", executable), ("Whisper", model), ("Silero VAD", vad)):
         if not path.is_file():

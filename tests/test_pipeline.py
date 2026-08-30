@@ -94,7 +94,7 @@ def test_pipeline_unloads_asr_before_loading_translation(tmp_path: Path) -> None
     events: list[str] = []
 
     config = AppConfig(
-        asr_model_path=str(asr_model),
+        asr_whisper_model_path=str(asr_model),
         translation_model_path=str(translation_model),
         translation_engine="local",
     )
@@ -136,7 +136,7 @@ def test_pipeline_unloads_model_when_asr_raises(tmp_path: Path) -> None:
             raise RuntimeError("boom")
 
     pipeline = ProcessingPipeline(
-        AppConfig(asr_model_path=str(model)),
+        AppConfig(asr_whisper_model_path=str(model)),
         server_factory=lambda **kwargs: FakeServer(events, **kwargs),  # type: ignore[arg-type]
         crispasr_factory=lambda **kwargs: BrokenASR(events, **kwargs),  # type: ignore[arg-type]
     )
@@ -165,8 +165,8 @@ def test_pipeline_passes_qwen3_backend_and_aligner(tmp_path: Path) -> None:
     pipeline = ProcessingPipeline(
         AppConfig(
             asr_backend="qwen3-1.7b",
-            asr_model_path=str(model),
-            asr_aligner_model_path=str(aligner),
+            asr_qwen3_model_path=str(model),
+            asr_qwen3_aligner_model_path=str(aligner),
             asr_vad_enabled=False,
         ),
         crispasr_factory=CapturingASR,  # type: ignore[arg-type]
@@ -185,7 +185,7 @@ def test_vocal_separation_finishes_before_asr_load(tmp_path: Path) -> None:
     separator_model.touch()
     events: list[str] = []
     config = AppConfig(
-        asr_model_path=str(asr_model),
+        asr_whisper_model_path=str(asr_model),
         vocal_separation_enabled=True,
         vocal_separation_model_path=str(separator_model),
     )
