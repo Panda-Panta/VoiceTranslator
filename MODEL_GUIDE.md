@@ -59,6 +59,19 @@ VoiceTranslator 通过 CrispASR 的 `qwen3-1.7b` 后端运行 Qwen3-ASR，并使
 
 Qwen3-ASR、Forced Aligner、Whisper 与翻译模型均由短生命周期子进程持有，阶段完成、失败、取消或退出时都会停止进程并释放模型。
 
+## Qwen 自动语言检测（v1.3.1）
+
+首页新增“源语言”，选择后自动保存，且与“目标语言”独立。日语素材可选择“日本語”，跳过检测；继续使用“自动检测”时，Qwen 需要额外的本地多语言 Whisper tiny 模型，主识别仍由 Qwen 完成。
+
+- 下载：[ggml-tiny.bin（约 78 MB）](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin?download=true)。不要下载仅英文的 `tiny.en`。
+- SHA-256：`be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21`。
+- 放入程序目录的 `models/lid/ggml-tiny.bin`，重启后自动发现；也可以在“转录设置 → Qwen → 语言检测模型”手动选择。
+- 源码/整合包构建前可将文件放在 `runtime/lid/ggml-tiny.bin`；整合包构建脚本会复制到包内 `models/lid`。
+- 文件缺失或格式无效时，在提取音频和人声分离前提示；不会再让 CrispASR 隐式下载并反复等待。指定源语言和 Whisper 后端不需要这个附加模型。
+- 主模型、对齐模型及量化设置保持不变。日志新增识别总耗时（含加载与对齐）和人声分离耗时。
+
+语言参数能力参考 [CrispASR CLI 文档](https://github.com/CrispStrobe/CrispASR/blob/main/docs/cli.md)。
+
 ## Silero VAD
 
 下载 [ggml-silero-v6.2.0.bin](https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin)，然后在“转录设置 → VAD 模型路径”中选择该文件，并启用 VAD。

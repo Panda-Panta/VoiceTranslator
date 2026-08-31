@@ -3,11 +3,13 @@ from __future__ import annotations
 import shutil
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.config import AppConfig, resolve_whisper_runtime
+from app.config import AppConfig, resolve_whisper_runtime, resolve_lid_runtime
+from app.core.language_detection import validate_lid_model
 from app.core.crispasr_engine import CrispASREngine
 from app.core.file_handler import FileHandler
 from app.core.llama_server_manager import LlamaServerManager
@@ -105,6 +107,10 @@ class ProcessingPipeline:
         handler = FileHandler(self.config.ffmpeg_path)
         parser = SubtitleParser()
         items = [_WorkItem(Path(path), handler.detect_type(path)) for path in task.input_files]
+        if any(item.file_type in {FileType.AUDIO, FileType.VIDEO} for item in items):
+            resolve_lid_runtime(self.config)
+            validate_lid_model(self.config.asr_backend, self._asr_language(task.source_language),
+                               self.config.asr_qwen3_lid_model_path)
         self.on_progress(2, "正在准备文件")
 
         with tempfile.TemporaryDirectory(prefix="voice_translator_") as temp_dir:
@@ -134,7 +140,9 @@ class ProcessingPipeline:
 
             media_items = [item for item in items if item.audio_path is not None]
             if media_items and self.config.vocal_separation_enabled:
+                separation_started = time.perf_counter()
                 self._separate_vocals(media_items, temp_root)
+                self.on_log(f"人声分离阶段耗时：{time.perf_counter() - separation_started:.2f} 秒")
             if media_items:
                 self._transcribe_all(media_items, task.source_language)
             self.on_progress(55, "转录阶段完成，ASR 模型已卸载")
@@ -207,6 +215,7 @@ class ProcessingPipeline:
             model_path=model_path,
             backend=self.config.asr_backend,
             aligner_model_path=aligner_model_path,
+            lid_model_path=self.config.asr_qwen3_lid_model_path,
             threads=self.config.asr_threads,
             language=self._asr_language(source_language),
             vad_enabled=self.config.asr_vad_enabled,

@@ -171,8 +171,9 @@ def test_pipeline_passes_qwen3_backend_and_aligner(tmp_path: Path) -> None:
         ),
         crispasr_factory=CapturingASR,  # type: ignore[arg-type]
     )
-    pipeline.run(ProcessingTask(input_files=[str(audio)], process_mode=ProcessMode.TRANSCRIBE_ONLY))
+    pipeline.run(ProcessingTask(input_files=[str(audio)], source_language="日本語", process_mode=ProcessMode.TRANSCRIBE_ONLY))
     assert captured["backend"] == "qwen3-1.7b"
+    assert captured["language"] == "ja"
     assert captured["aligner_model_path"] == str(aligner)
 
 

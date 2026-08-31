@@ -9,6 +9,7 @@
   "start": "Start",
   "cancel": "Cancel",
   "target_language": "Target language",
+  "source_language": "Source language",
   "export_format": "Export format",
   "content_mode": "Content mode",
   "process_mode": "Processing mode",

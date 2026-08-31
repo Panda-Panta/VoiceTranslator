@@ -32,7 +32,7 @@ class MainWindow(FluentWindow):
         self.i18n = I18n(config.language)
         self._background_pixmap = QPixmap()
         self._apply_theme()
-        self.home = HomeInterface(config, self)
+        self.home = HomeInterface(config, self, store=store)
         self.general = GeneralSettingsInterface(config, store)
         self.general.appearanceChanged.connect(self._apply_appearance)
         self.asr = ASRSettingsInterface(config, store)

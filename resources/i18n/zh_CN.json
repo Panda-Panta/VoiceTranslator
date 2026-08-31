@@ -9,6 +9,7 @@
   "start": "开始处理",
   "cancel": "取消",
   "target_language": "目标语言",
+  "source_language": "源语言",
   "export_format": "导出格式",
   "content_mode": "内容模式",
   "process_mode": "处理方式",

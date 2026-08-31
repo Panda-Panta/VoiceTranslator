@@ -51,6 +51,7 @@ class AppConfig:
     asr_whisper_model_path: str = ""
     asr_qwen3_model_path: str = ""
     asr_qwen3_aligner_model_path: str = ""
+    asr_qwen3_lid_model_path: str = ""
     asr_gpu_layers: int = 999
     asr_threads: int = max(1, min(32, os.cpu_count() or 4))
     asr_timestamps: bool = True
@@ -176,6 +177,21 @@ def resolve_whisper_runtime(config: AppConfig, roots: list[Path] | None = None) 
     return False
 
 
+def resolve_lid_runtime(config: AppConfig, roots: list[Path] | None = None) -> bool:
+    """Discover bundled tiny only for an unset path; never hide a broken custom path."""
+    if config.asr_qwen3_lid_model_path:
+        return False
+    for root in roots or _application_roots():
+        candidate = _first_existing_file(
+            root / "models" / "lid" / "ggml-tiny.bin",
+            root / "runtime" / "lid" / "ggml-tiny.bin",
+        )
+        if candidate is not None:
+            config.asr_qwen3_lid_model_path = str(candidate)
+            return True
+    return False
+
+
 def _first_existing_file(*values: object) -> Path | None:
     for value in values:
         if value is None or str(value).strip() == "":
@@ -218,6 +234,7 @@ class ConfigStore:
 
     def load(self) -> AppConfig:
         if not self.path.exists():
+            resolve_lid_runtime(self.value)
             resolve_whisper_runtime(self.value)
             resolve_separation_runtime(self.value)
             return self.value
@@ -227,11 +244,13 @@ class ConfigStore:
             allowed = {item.name for item in fields(AppConfig)}
             self.value = AppConfig(**{key: val for key, val in raw.items() if key in allowed})
             changed = resolve_whisper_runtime(self.value)
+            changed = resolve_lid_runtime(self.value) or changed
             changed = resolve_separation_runtime(self.value) or changed
             if changed or migrated:
                 self.save()
         except (OSError, ValueError, TypeError):
             self.value = AppConfig()
+            resolve_lid_runtime(self.value)
             resolve_whisper_runtime(self.value)
             resolve_separation_runtime(self.value)
         return self.value

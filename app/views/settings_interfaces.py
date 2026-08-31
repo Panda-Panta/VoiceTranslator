@@ -261,6 +261,8 @@ class ASRSettingsInterface(SettingsPage):
             file_filter="Qwen3 Forced Aligner (*.gguf);;所有文件 (*)",
         )
         self.aligner_model.edit.setPlaceholderText("选择 qwen3-forced-aligner-0.6b-*.gguf")
+        self.lid_model = PathPicker(config.asr_qwen3_lid_model_path, file_filter="多语言 Whisper 模型 (*.bin);;所有文件 (*)")
+        self.lid_model.edit.setPlaceholderText("ggml-tiny.bin（仅自动检测源语言时需要）")
         self.qwen_model_detected = QLabel()
         self.qwen_model.edit.textChanged.connect(
             lambda value: self._sync_model_label(self.qwen_model_detected, value)
@@ -271,6 +273,10 @@ class ASRSettingsInterface(SettingsPage):
         qwen_form.setContentsMargins(0, 0, 0, 0)
         qwen_form.addRow("Qwen3-ASR 主模型", self.qwen_model)
         qwen_form.addRow("Forced Aligner 对齐模型", self.aligner_model)
+        qwen_form.addRow("语言检测模型（自动检测时）", self.lid_model)
+        lid_hint = QLabel("首页可指定源语言以跳过检测；自动检测仅使用本地模型，不会后台下载。")
+        lid_hint.setWordWrap(True)
+        qwen_form.addRow(lid_hint)
         qwen_form.addRow("自动识别规格", self.qwen_model_detected)
 
         self.model_stack = QStackedWidget()
@@ -348,6 +354,7 @@ class ASRSettingsInterface(SettingsPage):
         self.config.asr_whisper_model_path = self.whisper_model.text()
         self.config.asr_qwen3_model_path = self.qwen_model.text()
         self.config.asr_qwen3_aligner_model_path = self.aligner_model.text()
+        self.config.asr_qwen3_lid_model_path = self.lid_model.text()
         self.config.asr_gpu_layers = self.gpu.value()
         self.config.asr_threads = self.threads.value()
         self.config.asr_device = self.device.value()

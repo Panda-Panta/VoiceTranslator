@@ -28,7 +28,7 @@ from qfluentwidgets import (
 )
 
 from app.common.constants import LANGUAGES, SUPPORTED_EXTENSIONS
-from app.config import AppConfig
+from app.config import AppConfig, ConfigStore
 from app.core.file_handler import FileHandler, UnsupportedFileTypeError
 from app.core.pipeline import PipelineCancelled, ProcessingPipeline
 from app.i18n import I18n
@@ -68,11 +68,12 @@ class PipelineWorker(QObject):
 
 
 class HomeInterface(QWidget):
-    def __init__(self, config: AppConfig, parent: QWidget | None = None) -> None:
+    def __init__(self, config: AppConfig, parent: QWidget | None = None, *, store: ConfigStore | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("homeInterface")
         self.setAcceptDrops(True)
         self.config = config
+        self.store = store
         self.i18n = I18n(config.language)
         self._thread: QThread | None = None
         self._worker: PipelineWorker | None = None
@@ -103,6 +104,14 @@ class HomeInterface(QWidget):
 
         options_card = CardWidget(self)
         form = QFormLayout(options_card)
+        self.source_language = ComboBox()
+        self.source_language.addItems(["自动检测", *LANGUAGES])
+        selected = next((label for label in ["自动检测", *LANGUAGES]
+                         if ProcessingPipeline._asr_language(label) == self.config.asr_language
+                         or label == self.config.asr_language), "自动检测")
+        self.source_language.setCurrentText(selected)
+        self.source_language.setToolTip("已知源语言时直接选择可跳过检测；Qwen 自动检测需要本地语言检测模型")
+        self.source_language.currentTextChanged.connect(self._save_source_language)
         self.target_language = ComboBox()
         self.target_language.addItems(LANGUAGES)
         self.export_format = ComboBox()
@@ -113,6 +122,7 @@ class HomeInterface(QWidget):
         self.process_mode.addItem("transcribe", self.i18n("transcribe_only"))
         self.process_mode.addItem("translate", self.i18n("transcribe_translate"))
         self.process_mode.setCurrentItem("translate")
+        form.addRow(self.i18n("source_language"), self.source_language)
         form.addRow(self.i18n("target_language"), self.target_language)
         form.addRow(self.i18n("export_format"), self.export_format)
         form.addRow(self.i18n("content_mode"), self.content_mode)
@@ -139,6 +149,11 @@ class HomeInterface(QWidget):
         self.start_button.clicked.connect(self._start)
         self.cancel_button.clicked.connect(self._cancel)
         self.process_mode.currentItemChanged.connect(self._sync_mode)
+
+    def _save_source_language(self, value: str) -> None:
+        self.config.asr_language = ProcessingPipeline._asr_language(value)
+        if self.store is not None:
+            self.store.save(self.config)
 
     def _choose_files(self) -> None:
         patterns = " ".join(f"*{suffix}" for suffix in sorted(SUPPORTED_EXTENSIONS))
@@ -187,6 +202,7 @@ class HomeInterface(QWidget):
         content_modes = [ContentMode.BILINGUAL, ContentMode.SOURCE_ONLY, ContentMode.TARGET_ONLY]
         task = ProcessingTask(
             input_files=files,
+            source_language=self.source_language.currentText(),
             target_language=self.target_language.currentText(),
             export_format=ExportFormat.SRT if self.export_format.currentIndex() == 0 else ExportFormat.LRC,
             content_mode=content_modes[self.content_mode.currentIndex()],
@@ -209,6 +225,7 @@ class HomeInterface(QWidget):
         self._worker.finished.connect(self._finish)
         self._thread.finished.connect(self._thread.deleteLater)
         self.start_button.setEnabled(False)
+        self.source_language.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self._thread.start()
 
@@ -228,6 +245,7 @@ class HomeInterface(QWidget):
         InfoBar.error("处理未完成", message, parent=self, position=InfoBarPosition.TOP, duration=6000)
 
     def _finish(self) -> None:
+        self.source_language.setEnabled(True)
         self.start_button.setEnabled(True)
         self.cancel_button.setEnabled(False)
         self._worker = None

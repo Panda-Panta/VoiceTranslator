@@ -6,12 +6,14 @@ import shlex
 import subprocess
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from shutil import which
 
 from app.common.text_encoding import iter_decoded_lines
 from app.core.subtitle_parser import SubtitleParser
+from app.core.language_detection import validate_lid_model
 from app.models import TranscriptionSegment
 
 
@@ -29,6 +31,7 @@ class CrispASREngine:
         *,
         backend: str = "whisper",
         aligner_model_path: str = "",
+        lid_model_path: str = "",
         threads: int = 4,
         language: str = "auto",
         vad_enabled: bool = True,
@@ -47,6 +50,7 @@ class CrispASREngine:
         if self.backend not in {"whisper", "qwen3-1.7b"}:
             raise ValueError(f"不支持的 CrispASR 后端：{self.backend}")
         self.aligner_model_path = aligner_model_path
+        self.lid_model_path = lid_model_path
         self.threads = max(1, threads)
         self.language = language or "auto"
         self.vad_enabled = vad_enabled
@@ -77,6 +81,9 @@ class CrispASREngine:
         with tempfile.TemporaryDirectory(prefix="voice_translator_asr_") as temp_dir:
             output_base = Path(temp_dir) / "transcript"
             command = self._build_command(executable, model, source, output_base)
+            started = time.perf_counter()
+            detection_note = "；使用本地语言检测模型" if self.is_qwen3 and self.language == "auto" else ""
+            self.log_callback(f"[{self.display_name}] 源语言：{self.language}{detection_note}")
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             try:
                 process = subprocess.Popen(
@@ -93,12 +100,22 @@ class CrispASREngine:
                 assert process.stdout is not None
                 for line in iter_decoded_lines(process.stdout):
                     message = line.rstrip()
+                    if "\x00" in message or len(message) > 4096:
+                        continue
                     if message:
                         self.log_callback(f"[{self.display_name}] {message}")
                 code = process.wait()
             finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
                 with self._lock:
                     self._process = None
+                self.log_callback(f"[{self.display_name}] 本次识别（含加载与对齐）耗时 {time.perf_counter() - started:.2f} 秒；模型进程已退出")
             if code != 0:
                 raise RuntimeError(f"{self.display_name} 转录失败，CrispASR 退出码 {code}")
 
@@ -144,6 +161,11 @@ class CrispASREngine:
         return "Qwen3-ASR" if self.is_qwen3 else "Whisper"
 
     def _build_command(self, executable: Path, model: Path, source: Path, output_base: Path) -> list[str]:
+        extra = self._split_extra_args(self.extra_args)
+        protected = {"-l", "--language", "--lid-model", "--lid-backend", "--backend", "-m", "--model", "--auto-download", "-hfr", "--hf-repo"}
+        if any(arg.split("=", 1)[0] in protected for arg in extra):
+            raise ValueError("请通过界面的源语言、语言检测模型及后端设置配置这些参数，不要在自定义参数中覆盖")
+        lid = validate_lid_model(self.backend, self.language, self.lid_model_path)
         command = [
             str(executable),
             "--backend",
@@ -161,6 +183,8 @@ class CrispASREngine:
             str(output_base),
         ]
         if self.is_qwen3:
+            if lid is not None:
+                command.extend(["--lid-backend", "whisper", "--lid-model", str(lid)])
             command.extend(
                 [
                     "--aligner-model",
@@ -182,7 +206,7 @@ class CrispASREngine:
         if self.split_on_punctuation:
             command.append("--split-on-punct")
         command.extend(["--device", str(self.device)] if self.use_gpu else ["--no-gpu"])
-        command.extend(self._split_extra_args(self.extra_args))
+        command.extend(extra)
         return command
 
     @staticmethod
