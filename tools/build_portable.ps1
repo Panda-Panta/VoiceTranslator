@@ -24,7 +24,6 @@ if (-not $Python) {
 $crispRoot = Join-Path $projectRoot "runtime\whisper\bin\crispasr-windows-x86_64-cuda"
 $whisperModels = Join-Path $projectRoot "runtime\whisper\models"
 $separationModel = Join-Path $projectRoot "runtime\separation\models\Kim_Vocal_2.onnx"
-$lidModel = Join-Path $projectRoot "runtime\lid\ggml-tiny.bin"
 $requiredFiles = @(
     $Python,
     (Join-Path $LlamaRoot "llama-server.exe"),
@@ -37,7 +36,6 @@ $requiredFiles = @(
     (Join-Path $whisperModels "ggml-large-v3-turbo-q5_0.bin"),
     (Join-Path $whisperModels "ggml-silero-v6.2.0.bin"),
     $separationModel
-    $lidModel
 )
 foreach ($path in $requiredFiles) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -76,9 +74,6 @@ try {
     $modelWhisper = Join-Path $packageRoot "models\whisper"
     $modelSeparation = Join-Path $packageRoot "models\separation"
     $modelTranslation = Join-Path $packageRoot "models\translation"
-    $modelLid = Join-Path $packageRoot "models\lid"
-    New-Item -ItemType Directory -Force -Path $modelLid | Out-Null
-    Copy-Item -LiteralPath $lidModel -Destination $modelLid
     New-Item -ItemType Directory -Force -Path $runtimeLlama, $runtimeWhisper, $runtimeFfmpeg, $modelWhisper, $modelSeparation, $modelTranslation | Out-Null
 
     Copy-Item -Path (Join-Path $LlamaRoot "*") -Destination $runtimeLlama -Recurse -Force
@@ -109,11 +104,7 @@ try {
         open_output_directory = $false
         llama_server_path = "runtime\llama\llama-server.exe"
         crispasr_path = "runtime\whisper\bin\crispasr.exe"
-        asr_backend = "whisper"
         asr_whisper_model_path = "models\whisper\ggml-large-v2-q8_0.bin"
-        asr_qwen3_model_path = ""
-        asr_qwen3_aligner_model_path = ""
-        asr_qwen3_lid_model_path = "models\lid\ggml-tiny.bin"
         asr_gpu_layers = 999
         asr_threads = 20
         asr_timestamps = $true
@@ -129,7 +120,6 @@ try {
         subtitle_merge_gap_ms = 250
         asr_device = 0
         asr_whisper_extra_args = ""
-        asr_qwen3_extra_args = ""
         vocal_separation_enabled = $true
         vocal_separation_model_path = "models\separation\Kim_Vocal_2.onnx"
         translation_engine = "local"

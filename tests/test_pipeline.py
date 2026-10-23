@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.config import AppConfig
-from app.core.pipeline import ProcessingPipeline
+from app.core.pipeline import PipelineCancelled, ProcessingPipeline
 from app.models import ContentMode, ExportFormat, ProcessMode, ProcessingTask, TranscriptionSegment
 
 
@@ -146,13 +146,14 @@ def test_pipeline_unloads_model_when_asr_raises(tmp_path: Path) -> None:
     assert events == ["start:asr:asr.gguf", "stop:asr"]
 
 
-def test_pipeline_passes_qwen3_backend_and_aligner(tmp_path: Path) -> None:
+@pytest.mark.parametrize("source_language,expected", [("自动检测", "auto"), ("日本語", "ja"), ("English", "en")])
+def test_pipeline_passes_whisper_settings_and_source_language(
+    tmp_path: Path, source_language: str, expected: str
+) -> None:
     audio = tmp_path / "sample.wav"
-    model = tmp_path / "qwen3-asr.gguf"
-    aligner = tmp_path / "qwen3-forced-aligner.gguf"
+    model = tmp_path / "whisper.bin"
     audio.touch()
     model.touch()
-    aligner.touch()
     captured: dict[str, object] = {}
 
     class CapturingASR(FakeASR):
@@ -164,17 +165,66 @@ def test_pipeline_passes_qwen3_backend_and_aligner(tmp_path: Path) -> None:
 
     pipeline = ProcessingPipeline(
         AppConfig(
-            asr_backend="qwen3-1.7b",
-            asr_qwen3_model_path=str(model),
-            asr_qwen3_aligner_model_path=str(aligner),
+            asr_whisper_model_path=str(model),
+            asr_whisper_extra_args="--beam-size 5",
             asr_vad_enabled=False,
         ),
         crispasr_factory=CapturingASR,  # type: ignore[arg-type]
     )
-    pipeline.run(ProcessingTask(input_files=[str(audio)], source_language="日本語", process_mode=ProcessMode.TRANSCRIBE_ONLY))
-    assert captured["backend"] == "qwen3-1.7b"
-    assert captured["language"] == "ja"
-    assert captured["aligner_model_path"] == str(aligner)
+    pipeline.run(
+        ProcessingTask(input_files=[str(audio)], source_language=source_language, process_mode=ProcessMode.TRANSCRIBE_ONLY)
+    )
+    assert captured["model_path"] == str(model)
+    assert captured["language"] == expected
+    assert captured["extra_args"] == "--beam-size 5"
+    assert captured["vad_enabled"] is False
+    assert not {"backend", "aligner_model_path", "lid_model_path"}.intersection(captured)
+
+
+def test_cancellation_between_files_unloads_asr_without_starting_translation(tmp_path: Path) -> None:
+    audio = tmp_path / "sample.wav"
+    next_audio = tmp_path / "next.wav"
+    model = tmp_path / "whisper.bin"
+    audio.touch()
+    next_audio.touch()
+    model.touch()
+    events: list[str] = []
+
+    class CancellingASR(FakeWhisper):
+        def transcribe(self, path: str, timestamps: bool = True) -> list[TranscriptionSegment]:
+            segments = super().transcribe(path, timestamps)
+            pipeline.cancel()
+            return segments
+
+    pipeline = ProcessingPipeline(
+        AppConfig(asr_whisper_model_path=str(model), translation_model_path="translate.gguf"),
+        server_factory=lambda **kwargs: FakeServer(events, **kwargs),  # type: ignore[arg-type]
+        crispasr_factory=lambda **kwargs: CancellingASR(events, **kwargs),  # type: ignore[arg-type]
+    )
+    task = ProcessingTask(input_files=[str(audio), str(next_audio)], process_mode=ProcessMode.TRANSCRIBE_AND_TRANSLATE)
+    with pytest.raises(PipelineCancelled, match="任务已取消"):
+        pipeline.run(task)
+    assert events == ["start:asr:asr.gguf", "stop:asr"]
+    assert pipeline._active_asr is None
+
+
+def test_subtitle_only_task_does_not_require_asr_models(tmp_path: Path) -> None:
+    subtitle = tmp_path / "sample.srt"
+    subtitle.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8")
+
+    def unexpected_asr(**_kwargs: object) -> None:
+        raise AssertionError("Subtitle input must not start ASR")
+
+    pipeline = ProcessingPipeline(AppConfig(), crispasr_factory=unexpected_asr)  # type: ignore[arg-type]
+    outputs = pipeline.run(
+        ProcessingTask(
+            input_files=[str(subtitle)],
+            output_directory=str(tmp_path / "out"),
+            content_mode=ContentMode.SOURCE_ONLY,
+            process_mode=ProcessMode.TRANSCRIBE_ONLY,
+        )
+    )
+    assert "hello" in Path(outputs[0]).read_text(encoding="utf-8-sig")
 
 
 def test_vocal_separation_finishes_before_asr_load(tmp_path: Path) -> None:

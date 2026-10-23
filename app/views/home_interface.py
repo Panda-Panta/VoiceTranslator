@@ -110,7 +110,7 @@ class HomeInterface(QWidget):
                          if ProcessingPipeline._asr_language(label) == self.config.asr_language
                          or label == self.config.asr_language), "自动检测")
         self.source_language.setCurrentText(selected)
-        self.source_language.setToolTip("已知源语言时直接选择可跳过检测；Qwen 自动检测需要本地语言检测模型")
+        self.source_language.setToolTip("自动检测由 Whisper 模型完成；已知源语言时可直接指定")
         self.source_language.currentTextChanged.connect(self._save_source_language)
         self.target_language = ComboBox()
         self.target_language.addItems(LANGUAGES)

@@ -47,11 +47,7 @@ class AppConfig:
 
     llama_server_path: str = "llama-server"
     crispasr_path: str = "crispasr"
-    asr_backend: str = "whisper"
     asr_whisper_model_path: str = ""
-    asr_qwen3_model_path: str = ""
-    asr_qwen3_aligner_model_path: str = ""
-    asr_qwen3_lid_model_path: str = ""
     asr_gpu_layers: int = 999
     asr_threads: int = max(1, min(32, os.cpu_count() or 4))
     asr_timestamps: bool = True
@@ -67,7 +63,6 @@ class AppConfig:
     subtitle_merge_gap_ms: int = 250
     asr_device: int = 0
     asr_whisper_extra_args: str = ""
-    asr_qwen3_extra_args: str = ""
     vocal_separation_enabled: bool = False
     vocal_separation_model_path: str = ""
 
@@ -85,41 +80,29 @@ class AppConfig:
     server_start_timeout: float = 120.0
     auto_unload_models: bool = True
 
-    def selected_asr_model_path(self) -> str:
-        if self.asr_backend == "qwen3-1.7b":
-            return self.asr_qwen3_model_path
-        return self.asr_whisper_model_path
-
-    def selected_asr_aligner_model_path(self) -> str:
-        return self.asr_qwen3_aligner_model_path if self.asr_backend == "qwen3-1.7b" else ""
-
-    def selected_asr_extra_args(self) -> str:
-        if self.asr_backend == "qwen3-1.7b":
-            return self.asr_qwen3_extra_args
-        return self.asr_whisper_extra_args
-
 
 def _migrate_legacy_asr_config(raw: dict[str, Any]) -> bool:
-    """Move the former shared ASR fields into the selected backend once."""
+    """Keep legacy Whisper settings and discard retired ASR configuration."""
     changed = False
-    backend = str(raw.get("asr_backend", "whisper"))
-    model = str(raw.get("asr_model_path", "")).strip()
-    if model:
-        target = "asr_qwen3_model_path" if backend == "qwen3-1.7b" else "asr_whisper_model_path"
-        if target not in raw:
-            raw[target] = model
-            changed = True
-    aligner = str(raw.get("asr_aligner_model_path", "")).strip()
-    if aligner and "asr_qwen3_aligner_model_path" not in raw:
-        raw["asr_qwen3_aligner_model_path"] = aligner
-        changed = True
-    extra_args = str(raw.get("asr_extra_args", "")).strip()
-    if extra_args:
-        target = "asr_qwen3_extra_args" if backend == "qwen3-1.7b" else "asr_whisper_extra_args"
-        if target not in raw:
-            raw[target] = extra_args
-            changed = True
-    for legacy_name in ("asr_model_path", "asr_aligner_model_path", "asr_extra_args"):
+    if raw.get("asr_backend", "whisper") == "whisper":
+        for legacy_name, target in (
+            ("asr_model_path", "asr_whisper_model_path"),
+            ("asr_extra_args", "asr_whisper_extra_args"),
+        ):
+            value = str(raw.get(legacy_name, "")).strip()
+            if value and target not in raw:
+                raw[target] = value
+                changed = True
+    for legacy_name in (
+        "asr_backend",
+        "asr_model_path",
+        "asr_aligner_model_path",
+        "asr_extra_args",
+        "asr_qwen3_model_path",
+        "asr_qwen3_aligner_model_path",
+        "asr_qwen3_lid_model_path",
+        "asr_qwen3_extra_args",
+    ):
         if legacy_name in raw:
             raw.pop(legacy_name)
             changed = True
@@ -177,21 +160,6 @@ def resolve_whisper_runtime(config: AppConfig, roots: list[Path] | None = None) 
     return False
 
 
-def resolve_lid_runtime(config: AppConfig, roots: list[Path] | None = None) -> bool:
-    """Discover bundled tiny only for an unset path; never hide a broken custom path."""
-    if config.asr_qwen3_lid_model_path:
-        return False
-    for root in roots or _application_roots():
-        candidate = _first_existing_file(
-            root / "models" / "lid" / "ggml-tiny.bin",
-            root / "runtime" / "lid" / "ggml-tiny.bin",
-        )
-        if candidate is not None:
-            config.asr_qwen3_lid_model_path = str(candidate)
-            return True
-    return False
-
-
 def _first_existing_file(*values: object) -> Path | None:
     for value in values:
         if value is None or str(value).strip() == "":
@@ -234,7 +202,6 @@ class ConfigStore:
 
     def load(self) -> AppConfig:
         if not self.path.exists():
-            resolve_lid_runtime(self.value)
             resolve_whisper_runtime(self.value)
             resolve_separation_runtime(self.value)
             return self.value
@@ -244,13 +211,11 @@ class ConfigStore:
             allowed = {item.name for item in fields(AppConfig)}
             self.value = AppConfig(**{key: val for key, val in raw.items() if key in allowed})
             changed = resolve_whisper_runtime(self.value)
-            changed = resolve_lid_runtime(self.value) or changed
             changed = resolve_separation_runtime(self.value) or changed
             if changed or migrated:
                 self.save()
         except (OSError, ValueError, TypeError):
             self.value = AppConfig()
-            resolve_lid_runtime(self.value)
             resolve_whisper_runtime(self.value)
             resolve_separation_runtime(self.value)
         return self.value

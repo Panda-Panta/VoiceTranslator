@@ -111,7 +111,6 @@ if (-not $SkipAppConfig) {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $configPath) | Out-Null
     }
     Set-ConfigValue $config "crispasr_path" $crispasrExe.FullName
-    Set-ConfigValue $config "asr_backend" "whisper"
     Set-ConfigValue $config "asr_whisper_model_path" $whisperModel
     Set-ConfigValue $config "asr_vad_enabled" $true
     Set-ConfigValue $config "asr_vad_model_path" $vadModel
@@ -122,6 +121,11 @@ if (-not $SkipAppConfig) {
     $config.PSObject.Properties.Remove("asr_model_path")
     $config.PSObject.Properties.Remove("asr_aligner_model_path")
     $config.PSObject.Properties.Remove("asr_extra_args")
+    $config.PSObject.Properties.Remove("asr_backend")
+    $config.PSObject.Properties.Remove("asr_qwen3_model_path")
+    $config.PSObject.Properties.Remove("asr_qwen3_aligner_model_path")
+    $config.PSObject.Properties.Remove("asr_qwen3_lid_model_path")
+    $config.PSObject.Properties.Remove("asr_qwen3_extra_args")
     [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 10), $utf8NoBom)
     Write-Host "已更新应用配置：$configPath"
 }

@@ -8,8 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.config import AppConfig, resolve_whisper_runtime, resolve_lid_runtime
-from app.core.language_detection import validate_lid_model
+from app.config import AppConfig, resolve_whisper_runtime
 from app.core.crispasr_engine import CrispASREngine
 from app.core.file_handler import FileHandler
 from app.core.llama_server_manager import LlamaServerManager
@@ -107,10 +106,6 @@ class ProcessingPipeline:
         handler = FileHandler(self.config.ffmpeg_path)
         parser = SubtitleParser()
         items = [_WorkItem(Path(path), handler.detect_type(path)) for path in task.input_files]
-        if any(item.file_type in {FileType.AUDIO, FileType.VIDEO} for item in items):
-            resolve_lid_runtime(self.config)
-            validate_lid_model(self.config.asr_backend, self._asr_language(task.source_language),
-                               self.config.asr_qwen3_lid_model_path)
         self.on_progress(2, "正在准备文件")
 
         with tempfile.TemporaryDirectory(prefix="voice_translator_") as temp_dir:
@@ -195,27 +190,12 @@ class ProcessingPipeline:
 
     def _transcribe_all(self, items: list[_WorkItem], source_language: str = "自动检测") -> None:
         resolve_whisper_runtime(self.config)
-        model_path = self.config.selected_asr_model_path()
-        aligner_model_path = self.config.selected_asr_aligner_model_path()
+        model_path = self.config.asr_whisper_model_path
         if not model_path:
-            raise ValueError(f"未选择 {self._asr_display_name()} 模型")
-        if self.config.asr_backend == "qwen3-1.7b" and not aligner_model_path:
-            raise ValueError("未选择 Qwen3 Forced Aligner 模型")
-        self._transcribe_all_whisper(items, source_language, model_path, aligner_model_path)
-
-    def _transcribe_all_whisper(
-        self,
-        items: list[_WorkItem],
-        source_language: str,
-        model_path: str,
-        aligner_model_path: str,
-    ) -> None:
+            raise ValueError("未选择 Whisper 模型")
         engine = self.crispasr_factory(
             executable=self.config.crispasr_path,
             model_path=model_path,
-            backend=self.config.asr_backend,
-            aligner_model_path=aligner_model_path,
-            lid_model_path=self.config.asr_qwen3_lid_model_path,
             threads=self.config.asr_threads,
             language=self._asr_language(source_language),
             vad_enabled=self.config.asr_vad_enabled,
@@ -225,16 +205,15 @@ class ProcessingPipeline:
             split_on_punctuation=self.config.asr_split_on_punctuation,
             device=self.config.asr_device,
             use_gpu=self.config.asr_gpu_layers != 0,
-            extra_args=self.config.selected_asr_extra_args(),
+            extra_args=self.config.asr_whisper_extra_args,
             log_callback=self.on_log,
         )
         self._active_asr = engine
-        display_name = self._asr_display_name()
-        self.on_progress(15, f"正在加载 {display_name} 模型")
+        self.on_progress(15, "正在加载 Whisper 模型")
         try:
             for index, item in enumerate(items, 1):
                 self._check_cancelled()
-                self.on_log(f"正在使用 {display_name} 转录：{item.source.name}")
+                self.on_log(f"正在使用 Whisper 转录：{item.source.name}")
                 item.segments = engine.transcribe(str(item.audio_path), timestamps=True)
                 if not item.segments:
                     raise RuntimeError(f"转录结果为空：{item.source.name}")
@@ -250,9 +229,6 @@ class ProcessingPipeline:
         finally:
             engine.stop()
             self._active_asr = None
-
-    def _asr_display_name(self) -> str:
-        return "Qwen3-ASR" if self.config.asr_backend == "qwen3-1.7b" else "Whisper"
 
     @staticmethod
     def _asr_language(value: str) -> str:

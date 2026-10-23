@@ -1,12 +1,29 @@
 # VoiceTranslator V2 — 重新设计实施计划书
 
+## 当前更新：移除 Qwen ASR 支持（2026-10-23）
+
+- 目标：应用只使用 CrispASR + Whisper 转录；移除 Qwen3-ASR、Forced Aligner、独立语言检测模型的运行入口、界面、配置和使用说明。保留 Whisper 自动/指定源语言、VAD、字幕处理、进程卸载及 Qwen 文本翻译。
+- 兼容：读取旧配置时保留独立 Whisper 设置及其他用户设置，清除已停用的 ASR 键；旧 Qwen 共享模型和参数不得迁入 Whisper。模型文件、个人配置与已有发布包不做批量删除。
+- 模式与基线：个人模式，主 agent 负责集成、Git 和交付；初始工作区干净，基线 `8f27064`，在 `test` 分支实施。既有远端为 `Panda-Panta/VoiceTranslator`，已核对拥有写入权限、`main` 无保护或必需检查且仍与基线一致；按项目约定验收后直接合入并普通推送。未确认本次安装目标，本次交付源码，不发布版本或替换现有安装。
+- 资源：复用 `python -m pytest`、现有 `tests/`、`tools/build_portable.ps1` 和 `tools/check_whisper_runtime.py`；后者会读取真实用户配置，运行检查改用隔离配置。沿用本计划和 `README_VOICE_TRANSLATOR.md` 的结构说明，无需新增文档体系或依赖。
+- 接口：`AppConfig` 保留 `asr_whisper_model_path`、`asr_whisper_extra_args` 及通用转录设置，删除后端选择、Qwen 专属字段与多后端选择方法；`CrispASREngine` 固定 Whisper，不接受后端、Aligner 或 LID 参数。
+- 并行批次：`asr_core` 独占 `app/core/crispasr_engine.py`、`app/core/pipeline.py`、`app/core/language_detection.py` 及对应引擎/管线/语言/LID 测试；`asr_ui` 独占 `app/views/settings_interfaces.py`、`app/views/home_interface.py` 及设置/首页测试；主 agent 独占 `app/config.py`、`tests/test_config.py`、便携包模板、计划和使用文档。子任务不操作 Git 或安装。
+- 验收：旧配置迁移、Whisper 命令与自动/指定语言、设置保存、VAD、取消/失败卸载和翻译顺序回归；运行完整 pytest、差异与残留引用检查，按本地资源条件补真实 Whisper/界面冒烟。测试输出放 `build/test-remove-qwen-asr/`；构建/模拟/实际模型运行证据分别记录。
+- 实施结果：`asr_core` 与 `asr_ui` 同批并行完成核心和界面移除；主 agent 完成迁移、安装/便携包模板及文档。Qwen 相关源码字符串仅用于旧键清理、禁止已移除参数的检查和回归样本；本地翻译支持与历史来源说明保留。
+- 验证结果：Windows / Python 3.11 / Qt offscreen，基线 54 项通过；配置 13 项、UI 6 项、核心 36 项定向测试通过。最终命令 `python -X utf8 -m pytest -p no:cacheprovider --basetemp build/test-remove-qwen-asr/integration --junitxml build/test-remove-qwen-asr/integration.xml`：**76 passed in 8.75s**。两份 PowerShell 脚本 AST 语法检查、`git diff --check` 及全项目残留引用核对通过。
+- 界面与审查：使用隔离的旧 Qwen 配置完成 `MainWindow` 启动、Whisper 设置渲染、关闭保存及翻译设置保留冒烟；截图位于 `build/test-remove-qwen-asr/whisper-settings.png`。`asr_ui` 独立审查未参与编写的配置/核心/工具并复核历史迁移契约，未发现阻塞缺陷。
+- 证据边界：当前源码目录缺少 CrispASR 可执行文件与 Whisper 权重，未实跑模型推理、GPU 或真实进程取消；未构建或安装新版 EXE。测试中的识别/翻译使用模拟引擎。主窗口证据为 offscreen 渲染，首次缺少字体，显式加载系统字体后重新检查通过，不代表可见窗口环境实测。
+- 执行修正：首次 pytest 的 `--basetemp` 父目录不存在导致夹具创建失败，创建父目录后基线通过；新增字幕测试的枚举名曾误写为 `ORIGINAL`，改为现有 `SOURCE_ONLY` 后通过。此类运行准备问题不记为产品缺陷。
+- 文档与整理：维护原有计划、README、模型指南及来源说明；工具和结构入口已核对。保留本次最终测试报告与界面证据，临时测试夹具在交付前清理；用户模型、实际配置和旧发布包未改动。现有开发流程已能覆盖本次操作，无新增领域 skill。
+- 状态：源码实现、回归和独立审查完成，进入 Git 提交与主线同步；最终提交以 Git 记录为准。
+
 ## 1. 项目定位
 
 VoiceTranslator V2 是一款 Windows 优先、本地化优先的音视频转录与字幕翻译工具，面向动画、影视、访谈、课程和带背景音乐的音频。
 
 核心目标：
 
-1. 默认使用 Whisper large-v3-turbo 生成高质量文本。
+1. 默认使用 Whisper large-v2 Q8 生成高质量文本，可选择 large-v3 或 large-v3-turbo。
 2. 使用 Silero VAD 与 Whisper 原生时间戳生成可靠的逐句时间轴。
 3. 对带伴奏音频提供可选的 UVR/MDX 自动人声分离。
 4. 支持本地 Hy-MT/Qwen/Gemma 等 GGUF 翻译模型及在线 OpenAI 兼容 API。
@@ -26,7 +43,7 @@ VoiceTranslator V2 是一款 Windows 优先、本地化优先的音视频转录�
 | 项目 | 原始方案 | V2 决策 | 原因 |
 |:---|:---|:---|:---|
 | ASR 运行时 | llama-server | CrispASR CLI/进程管理 | 当前 llama.cpp 转录接口只返回普通 JSON，不能稳定提供片段级时间轴 |
-| ASR 模型 | Qwen3-ASR 主 GGUF + mmproj | 当前仅 Whisper large-v3-turbo Q5 | Whisper 在 CrispASR 中直接提供成熟的原生时间戳；Qwen3 等以后完成兼容再加入 |
+| ASR 模型 | Qwen3-ASR 主 GGUF + mmproj | 仅 Whisper，默认 large-v2 Q8 | 按当前需求移除 Qwen ASR 支持，保留 Whisper 原生时间戳 |
 | 时间轴 | 假设 ASR API 返回 segments | Whisper 原生时间戳 + Silero VAD | 不需要额外加载 Forced Aligner，链路更简单、显存更低 |
 | 背景音乐 | 直接送入 ASR | 可选 UVR/MDX ONNX 人声分离 | VAD 只能检测语音，不能去除与对白同时存在的音乐 |
 | 本地翻译 | llama-server | 保留 llama-server | OpenAI 兼容聊天接口适合 Hy-MT2 等 GGUF 翻译模型 |
@@ -131,22 +148,22 @@ VAD 不负责：
 ```text
 crispasr.exe
   --backend whisper
-  --model <ggml-large-v3-turbo-q5_0.bin>
+  --model <ggml-large-v2-q8_0.bin>
   --language auto
   --output-srt
   --output-file <temp/output>
   --file <temp/input.wav>
   --vad
   --vad-model <ggml-silero-v6.2.0.bin>
-  --vad-min-silence-duration-ms 200
-  --split-on-punct
+  --vad-min-silence-duration-ms 500
+  --vad-speech-pad-ms 150
 ```
 
 ### 5.2 模型职责
 
 - Whisper：识别语言和文字，并原生生成片段时间戳。
 - Silero VAD：寻找语音区间并将时间映射回原始音轨。
-- Qwen3-ASR：暂不提供选项，等待后续完成运行时和时间轴兼容验证。
+- 自动语言检测由所选 Whisper 模型完成，不需要附加 LID 或对齐模型。
 
 ### 5.3 长文件
 
@@ -260,12 +277,12 @@ IDLE
 
 ASR：
 
-- Whisper large-v3-turbo / large-v3 / medium 模型。
+- Whisper large-v2 / large-v3 / large-v3-turbo 等 `.bin` 模型。
 - Silero VAD 本地模型。
 - Backend：固定为 whisper。
 - 识别语言：自动或指定。
 - VAD 参数。
-- 最大生成 token、频率惩罚和自定义参数。
+- Whisper 自定义参数；语言和模型等受控参数通过界面配置。
 
 ### 8.4 翻译设置
 
@@ -296,17 +313,13 @@ vocal_separation_enabled
 vocal_separation_model_path
 vocal_separation_model_target = instrumental | vocals
 
-asr_backend
 asr_whisper_model_path
-asr_qwen3_model_path
-asr_qwen3_aligner_model_path
 asr_language
 asr_vad_enabled
 asr_vad_model_path
 asr_vad_min_silence_ms
 asr_device
 asr_whisper_extra_args
-asr_qwen3_extra_args
 
 translation_engine = local | online
 translation_model_path
@@ -321,11 +334,11 @@ temperature
 translation_prompt
 ```
 
-旧版本的 llama.cpp ASR 主模型/mmproj 配置不再读取；安装器会清理这些旧键。未来重新兼容时另行设计迁移。
+旧版本的 llama.cpp ASR 主模型/mmproj 配置不再读取；安装器会清理这些旧键。旧 Whisper 共享配置迁移到专属字段；Qwen ASR、后端选择、Aligner 和 LID 配置清除，其他设置保留。
 
 ---
 
-## 10. 建议项目结构
+## 10. 当前项目结构与维护入口
 
 ```text
 VoiceTranslator/
@@ -337,7 +350,6 @@ VoiceTranslator/
 │   ├── core/
 │   │   ├── pipeline.py
 │   │   ├── file_handler.py
-│   │   ├── audio_normalizer.py
 │   │   ├── vocal_separator.py
 │   │   ├── crispasr_engine.py
 │   │   ├── translator.py
@@ -346,16 +358,13 @@ VoiceTranslator/
 │   └── views/
 │       ├── main_window.py
 │       ├── home_interface.py
-│       ├── general_settings.py
-│       ├── asr_settings.py
-│       ├── translation_settings.py
-│       └── about_interface.py
+│       └── settings_interfaces.py
 ├── resources/
 ├── tests/
 └── tools/
 ```
 
-重构时应清理当前同名 `.py` 文件与同名 package 并存的问题，确保每个模块只有一个权威实现。
+结构、工具与产物职责见 [README_VOICE_TRANSLATOR.md 的维护入口](README_VOICE_TRANSLATOR.md#维护入口)。本次删除独立的 `app/core/language_detection.py` 及其 LID 测试；其他模块布局保持现状。当前 `translator.py` 与 `translator/` 并存的问题留在原有重构待办，本次不扩展处理。
 
 ---
 
@@ -366,7 +375,7 @@ VoiceTranslator/
 | FFmpeg 不存在 | 开始前阻止任务并定位到全局设置 |
 | 分离模型不存在 | 仅在启用自动分离时阻止任务 |
 | 分离失败 | 清理临时输出，不启动 ASR |
-| CrispASR/模型/Aligner 不存在 | 开始前阻止任务并指出缺失项 |
+| CrispASR/Whisper 模型不存在 | 阻止转录并指出缺失项 |
 | ASR 生成空字幕 | 标记该文件失败，不进入翻译 |
 | 本地翻译服务启动超时 | 终止进程并保留原文字幕 |
 | 在线 API 失败 | 支持有限次数重试，最终保留原文和中间数据 |
@@ -384,7 +393,7 @@ VoiceTranslator/
 - 人声分离模型目标与输出轨选择。
 - 人声分离结束后才启动 ASR。
 - CrispASR 命令构造。
-- VAD/Aligner 参数传递。
+- VAD 与 Whisper 自动/指定源语言参数传递。
 - SRT/LRC 解析、合并和六种导出组合。
 - 全批转录完成后才调用 Translator。
 - 成功、失败、取消时的模型卸载顺序。
@@ -467,15 +476,15 @@ VoiceTranslator/
 
 - QFluentWidgets 基础 UI。
 - 批量文件、SRT/LRC 和导出。
-- Whisper large-v3-turbo Q5 + CrispASR CUDA 正式转录路径。
-- Silero VAD、本地 SRT 时间轴和 Qwen3 兼容后端。
+- Whisper + CrispASR 转录路径，默认 large-v2 Q8。
+- Silero VAD、Whisper 原生 SRT 时间轴和自动语言检测。
 - llama-server 本地翻译与在线翻译。
 - 自动模型卸载。
 - 可选 UVR/MDX 人声分离及 DirectML 环境。
 - 源目录输出和仅转录 UI 修复。
 - 一键 Whisper 运行时安装和检查脚本。
-- 20 项通过的自动测试。
-- RTX 3060 Laptop GPU 真实 CUDA 转录、SRT 导出和进程卸载验证。
+- 自动测试覆盖及本次运行结果见顶部当前更新记录。
+- 历史阶段曾完成 RTX 3060 Laptop GPU 的 CUDA 转录、SRT 导出和进程卸载验证；这不替代本次候选的模型实测。
 
 尚未完成的关键工作：
 

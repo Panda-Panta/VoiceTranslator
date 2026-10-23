@@ -1,11 +1,11 @@
 # VoiceTranslator
 
-面向 Windows 的本地化优先音视频转录、字幕整理与翻译桌面应用。项目采用独立的 PySide6 分层架构，支持 Whisper 与 Qwen3-ASR，并支持人声提取和本地大模型翻译。
+面向 Windows 的本地化优先音视频转录、字幕整理与翻译桌面应用。项目采用独立的 PySide6 分层架构，使用 Whisper 转录，并支持人声提取和本地大模型翻译。
 
 ## 核心功能
 
 - Whisper large-v2 为默认转录模型，可选 large-v3
-- Qwen3-ASR 1.7B 与 Qwen3 Forced Aligner 精确时间轴
+- Whisper 原生字幕时间轴与自动语言检测
 - Silero VAD 与字幕重排
 - Kim Vocal 2 ONNX 直接提取人声
 - llama.cpp 本地翻译或 OpenAI 兼容在线 API

@@ -1,6 +1,9 @@
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
+
+import pytest
 
 from app.config import AppConfig, ConfigStore, resolve_separation_runtime, resolve_whisper_runtime
 
@@ -49,28 +52,6 @@ def test_valid_custom_whisper_paths_are_not_overwritten(tmp_path: Path) -> None:
     assert config.asr_whisper_model_path == str(model)
 
 
-def test_qwen3_paths_are_not_replaced_by_whisper_runtime(tmp_path: Path) -> None:
-    runtime_executable, _whisper_model, runtime_vad = _install_runtime(tmp_path)
-    qwen_model = tmp_path / "qwen3-asr.gguf"
-    aligner = tmp_path / "qwen3-forced-aligner.gguf"
-    qwen_model.touch()
-    aligner.touch()
-    config = AppConfig(
-        crispasr_path="missing-crispasr.exe",
-        asr_backend="qwen3-1.7b",
-        asr_qwen3_model_path=str(qwen_model),
-        asr_qwen3_aligner_model_path=str(aligner),
-        asr_vad_model_path="missing-vad.bin",
-    )
-
-    assert resolve_whisper_runtime(config, [tmp_path])
-    assert config.crispasr_path == str(runtime_executable)
-    assert config.asr_qwen3_model_path == str(qwen_model)
-    assert config.asr_qwen3_aligner_model_path == str(aligner)
-    assert config.asr_whisper_model_path == str(_whisper_model)
-    assert config.asr_vad_model_path == str(runtime_vad)
-
-
 def test_portable_layout_fills_whisper_path_without_runtime_manifest(tmp_path: Path) -> None:
     executable = tmp_path / "runtime" / "whisper" / "bin" / "crispasr.exe"
     model = tmp_path / "models" / "whisper" / "ggml-large-v2-q8_0.bin"
@@ -78,11 +59,7 @@ def test_portable_layout_fills_whisper_path_without_runtime_manifest(tmp_path: P
     for path in (executable, model, vad):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
-    config = AppConfig(
-        asr_backend="qwen3-1.7b",
-        asr_qwen3_model_path="qwen.gguf",
-        asr_qwen3_aligner_model_path="aligner.gguf",
-    )
+    config = AppConfig()
 
     assert resolve_whisper_runtime(config, [tmp_path])
     assert config.crispasr_path == str(executable)
@@ -90,30 +67,98 @@ def test_portable_layout_fills_whisper_path_without_runtime_manifest(tmp_path: P
     assert config.asr_vad_model_path == str(vad)
 
 
-def test_legacy_shared_asr_fields_migrate_to_selected_backend(tmp_path: Path) -> None:
+@pytest.mark.parametrize("include_backend", [False, True])
+def test_legacy_whisper_settings_migrate(tmp_path: Path, monkeypatch, include_backend: bool) -> None:
+    monkeypatch.setattr("app.config._application_roots", lambda: [tmp_path])
+    model = tmp_path / "whisper.bin"
+    model.touch()
+    raw = {
+        "asr_model_path": str(model),
+        "asr_extra_args": "--temperature 0",
+        "asr_vad_enabled": False,
+    }
+    if include_backend:
+        raw["asr_backend"] = "whisper"
     path = tmp_path / "config.json"
-    path.write_text(
-        json.dumps(
-            {
-                "asr_backend": "qwen3-1.7b",
-                "asr_model_path": "qwen-old.gguf",
-                "asr_aligner_model_path": "aligner-old.gguf",
-                "asr_extra_args": "--legacy-qwen",
-                "asr_vad_enabled": False,
-            }
-        ),
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(raw), encoding="utf-8")
 
     config = ConfigStore(path).load()
 
-    assert config.asr_qwen3_model_path == "qwen-old.gguf"
-    assert config.asr_qwen3_aligner_model_path == "aligner-old.gguf"
-    assert config.asr_qwen3_extra_args == "--legacy-qwen"
+    assert config.asr_whisper_model_path == str(model)
+    assert config.asr_whisper_extra_args == "--temperature 0"
     saved = json.loads(path.read_text(encoding="utf-8"))
+    assert "asr_backend" not in saved
     assert "asr_model_path" not in saved
-    assert "asr_aligner_model_path" not in saved
     assert "asr_extra_args" not in saved
+
+
+@pytest.mark.parametrize("backend", ["whisper", "qwen3-1.7b"])
+def test_retired_asr_config_preserves_whisper_and_other_settings(tmp_path: Path, monkeypatch, backend: str) -> None:
+    monkeypatch.setattr("app.config._application_roots", lambda: [tmp_path])
+    whisper = tmp_path / "whisper.bin"
+    whisper.touch()
+    qwen = tmp_path / "qwen3-asr.gguf"
+    qwen.write_bytes(b"existing model data")
+    path = tmp_path / "config.json"
+    raw = {
+        "asr_backend": backend,
+        "asr_whisper_model_path": str(whisper),
+        "asr_whisper_extra_args": "--temperature 0",
+        "asr_model_path": str(qwen),
+        "asr_aligner_model_path": "old-aligner.gguf",
+        "asr_extra_args": "--max-new-tokens 96",
+        "asr_qwen3_model_path": str(qwen),
+        "asr_qwen3_aligner_model_path": "aligner.gguf",
+        "asr_qwen3_lid_model_path": "missing-lid.bin",
+        "asr_qwen3_extra_args": "--frequency-penalty 0.8",
+        "asr_vad_enabled": False,
+        "asr_language": "ja",
+        "translation_model_path": "Qwen-translation.gguf",
+        "api_key": "test-only-key",
+        "theme": "dark",
+        "ui_font_scale": 150,
+    }
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    store = ConfigStore(path)
+    config = store.load()
+
+    assert config.asr_whisper_model_path == str(whisper)
+    assert config.asr_whisper_extra_args == "--temperature 0"
+    assert config.asr_language == "ja"
+    assert config.translation_model_path == "Qwen-translation.gguf"
+    assert config.api_key == "test-only-key"
+    assert config.theme == "dark"
+    assert config.ui_font_scale == 150
+    assert qwen.read_bytes() == b"existing model data"
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    retired = {
+        "asr_backend", "asr_model_path", "asr_aligner_model_path", "asr_extra_args",
+        "asr_qwen3_model_path", "asr_qwen3_aligner_model_path", "asr_qwen3_lid_model_path", "asr_qwen3_extra_args",
+    }
+    assert retired.isdisjoint(saved)
+    assert retired.isdisjoint(asdict(config))
+    assert asdict(ConfigStore(path).load()) == asdict(config)
+
+
+@pytest.mark.parametrize("installed_whisper", [False, True])
+def test_old_qwen_shared_settings_never_become_whisper_settings(tmp_path: Path, monkeypatch, installed_whisper: bool) -> None:
+    monkeypatch.setattr("app.config._application_roots", lambda: [tmp_path])
+    expected_model = str(_install_runtime(tmp_path)[1]) if installed_whisper else ""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "asr_backend": "qwen3-1.7b",
+        "asr_model_path": "qwen-old.gguf",
+        "asr_aligner_model_path": "aligner-old.gguf",
+        "asr_extra_args": "--max-new-tokens 96",
+        "asr_vad_enabled": False,
+    }), encoding="utf-8")
+
+    config = ConfigStore(path).load()
+
+    assert config.asr_whisper_model_path == expected_model
+    assert config.asr_whisper_extra_args == ""
+    assert json.loads(path.read_text(encoding="utf-8")) == asdict(config)
 
 
 def test_separation_manifest_fills_official_onnx_model(tmp_path: Path) -> None:
