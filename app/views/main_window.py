@@ -4,12 +4,17 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
-from qfluentwidgets import FluentIcon, FluentWindow, NavigationItemPosition, Theme, setTheme, setThemeColor
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import QApplication, QWidget
+from qfluentwidgets import (
+    FluentIcon, FluentWindow, NavigationItemPosition, Theme,
+    isDarkTheme, qconfig, setTheme, setThemeColor,
+)
 
 from app.config import AppConfig, ConfigStore
 from app.i18n import I18n
 from app.ui_background import background_rect, normalize_background_scale_mode
+from app.ui_scale import apply_font_scale
 from app.views.home_interface import HomeInterface
 from app.views.settings_interfaces import (
     ASRSettingsInterface,
@@ -26,11 +31,17 @@ def _resource_path(name: str) -> Path:
 
 class MainWindow(FluentWindow):
     def __init__(self, config: AppConfig, store: ConfigStore) -> None:
+        # Native Windows controls can ignore palette colors. Fusion lets the
+        # standard Qt fields and Fluent controls use the same selected theme.
+        application = QApplication.instance()
+        if application.style().objectName().lower() != "fusion":
+            application.setStyle("Fusion")
         super().__init__()
         self.config = config
         self.store = store
         self.i18n = I18n(config.language)
         self._background_pixmap = QPixmap()
+        qconfig.themeChangedFinished.connect(self._sync_native_theme)
         self._apply_theme()
         self.home = HomeInterface(config, self, store=store)
         self.general = GeneralSettingsInterface(config, store)
@@ -54,11 +65,42 @@ class MainWindow(FluentWindow):
         self.resize(1120, 760)
         self.setMinimumSize(900, 640)
         self._reload_background()
+        apply_font_scale(config.ui_font_scale)
 
     def _apply_theme(self) -> None:
         theme = {"light": Theme.LIGHT, "dark": Theme.DARK}.get(self.config.theme, Theme.AUTO)
         setTheme(theme)
         setThemeColor(QColor(self.config.theme_color))
+
+    def _sync_native_theme(self) -> None:
+        """Keep native labels, fields, tables and popups readable in both themes."""
+        dark = isDarkTheme()
+        palette = QApplication.style().standardPalette()
+        colors = {
+            QPalette.Window: "#202020" if dark else "#f3f3f3",
+            QPalette.WindowText: "#f5f5f5" if dark else "#1f1f1f",
+            QPalette.Base: "#2b2b2b" if dark else "#ffffff",
+            QPalette.AlternateBase: "#323232" if dark else "#f5f5f5",
+            QPalette.Text: "#f5f5f5" if dark else "#1f1f1f",
+            QPalette.Button: "#333333" if dark else "#f8f8f8",
+            QPalette.ButtonText: "#f5f5f5" if dark else "#1f1f1f",
+            QPalette.ToolTipBase: "#333333" if dark else "#ffffff",
+            QPalette.ToolTipText: "#f5f5f5" if dark else "#1f1f1f",
+            QPalette.PlaceholderText: "#aaaaaa" if dark else "#666666",
+            QPalette.Highlight: self.config.theme_color,
+            QPalette.HighlightedText: "#ffffff",
+        }
+        for role, color in colors.items():
+            palette.setColor(role, QColor(color))
+        for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+            palette.setColor(QPalette.Disabled, role, QColor("#888888"))
+        QApplication.instance().setPalette(palette)
+        self.setPalette(palette)
+        # Native controls inside QSS-styled cards do not reliably inherit a
+        # changed application palette. Update them on live theme changes too.
+        for widget in self.findChildren(QWidget):
+            if type(widget).__module__ == "PySide6.QtWidgets":
+                widget.setPalette(palette)
 
     def _apply_appearance(self) -> None:
         self._apply_theme()

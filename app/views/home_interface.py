@@ -5,10 +5,12 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -16,7 +18,6 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import (
     CardWidget,
-    ComboBox,
     InfoBar,
     InfoBarPosition,
     PrimaryPushButton,
@@ -80,12 +81,22 @@ class HomeInterface(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QScrollArea.NoFrame)
+        self.scroll_area.viewport().setAutoFillBackground(False)
+        content = QWidget()
+        self.scroll_area.setWidget(content)
+        content.setAutoFillBackground(False)
+        page_layout.addWidget(self.scroll_area)
+        root = QVBoxLayout(content)
         root.setContentsMargins(28, 24, 28, 24)
         root.setSpacing(16)
         root.addWidget(SubtitleLabel(self.i18n("home")))
 
-        file_card = CardWidget(self)
+        file_card = CardWidget(content)
         file_layout = QVBoxLayout(file_card)
         buttons = QHBoxLayout()
         self.add_button = PrimaryPushButton(self.i18n("add_files"))
@@ -97,14 +108,17 @@ class HomeInterface(QWidget):
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["文件名", "类型", "大小"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         file_layout.addWidget(self.table)
         root.addWidget(file_card, 3)
 
-        options_card = CardWidget(self)
+        options_card = CardWidget(content)
         form = QFormLayout(options_card)
-        self.source_language = ComboBox()
+        self.source_language = QComboBox()
         self.source_language.addItems(["自动检测", *LANGUAGES])
         selected = next((label for label in ["自动检测", *LANGUAGES]
                          if ProcessingPipeline._asr_language(label) == self.config.asr_language
@@ -112,11 +126,11 @@ class HomeInterface(QWidget):
         self.source_language.setCurrentText(selected)
         self.source_language.setToolTip("自动检测由 Whisper 模型完成；已知源语言时可直接指定")
         self.source_language.currentTextChanged.connect(self._save_source_language)
-        self.target_language = ComboBox()
+        self.target_language = QComboBox()
         self.target_language.addItems(LANGUAGES)
-        self.export_format = ComboBox()
+        self.export_format = QComboBox()
         self.export_format.addItems(["SRT (.srt)", "LRC (.lrc)"])
-        self.content_mode = ComboBox()
+        self.content_mode = QComboBox()
         self.content_mode.addItems([self.i18n("bilingual"), self.i18n("source_only"), self.i18n("target_only")])
         self.process_mode = SegmentedWidget()
         self.process_mode.addItem("transcribe", self.i18n("transcribe_only"))

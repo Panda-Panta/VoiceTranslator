@@ -86,6 +86,7 @@ class SettingsPage(QScrollArea):
         layout.addWidget(heading)
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
         layout.addLayout(form)
         self.root.addWidget(card)
         return form
@@ -233,7 +234,9 @@ class ASRSettingsInterface(SettingsPage):
             file_filter="Whisper 模型 (*.bin);;所有文件 (*)",
         )
         self.whisper_model.edit.setPlaceholderText("选择 ggml-large-v2-*.bin")
-        self.whisper_model_detected = QLabel()
+        self.whisper_model_detected = QLineEdit()
+        self.whisper_model_detected.setReadOnly(True)
+        self.whisper_model_detected.setFrame(False)
         self.whisper_model.edit.textChanged.connect(
             lambda value: self._sync_model_label(self.whisper_model_detected, value)
         )
@@ -313,11 +316,13 @@ class ASRSettingsInterface(SettingsPage):
         self.separation_model.setEnabled(enabled)
 
     @staticmethod
-    def _sync_model_label(label: QLabel, value: str) -> None:
+    def _sync_model_label(label: QLineEdit, value: str) -> None:
         name = Path(value.strip()).stem
         if name.lower().startswith("ggml-"):
             name = name[5:]
         label.setText(name or "未选择模型")
+        label.setCursorPosition(0)
+        label.setToolTip(name)
 
 
 class TranslationSettingsInterface(SettingsPage):
@@ -345,6 +350,8 @@ class TranslationSettingsInterface(SettingsPage):
         self.api_key.setEchoMode(QLineEdit.Password)
         self.api_model = QComboBox()
         self.api_model.setEditable(True)
+        self.api_model.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.api_model.setMinimumContentsLength(12)
         if config.api_model:
             self.api_model.addItem(config.api_model)
         refresh = QPushButton("刷新模型列表")
