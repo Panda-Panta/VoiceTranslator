@@ -4,7 +4,7 @@
 
 - 目标：应用只使用 CrispASR + Whisper 转录；移除 Qwen3-ASR、Forced Aligner、独立语言检测模型的运行入口、界面、配置和使用说明。保留 Whisper 自动/指定源语言、VAD、字幕处理、进程卸载及 Qwen 文本翻译。
 - 兼容：读取旧配置时保留独立 Whisper 设置及其他用户设置，清除已停用的 ASR 键；旧 Qwen 共享模型和参数不得迁入 Whisper。模型文件、个人配置与已有发布包不做批量删除。
-- 模式与基线：个人模式，主 agent 负责集成、Git 和交付；初始工作区干净，基线 `8f27064`，在 `test` 分支实施。既有远端为 `Panda-Panta/VoiceTranslator`，已核对拥有写入权限、`main` 无保护或必需检查且仍与基线一致；按项目约定验收后直接合入并普通推送。未确认本次安装目标，本次交付源码，不发布版本或替换现有安装。
+- 模式与基线：个人模式，主 agent 负责集成、Git 和交付；初始工作区干净，基线 `8f27064`，在 `test` 分支实施。既有远端为 `Panda-Panta/VoiceTranslator`，已核对拥有写入权限、`main` 无保护或必需检查且仍与基线一致；本地按项目约定直接合入，公开推送因自动审批要求明确授权而暂缓。未确认本次安装目标，本次交付源码，不发布版本或替换现有安装。
 - 资源：复用 `python -m pytest`、现有 `tests/`、`tools/build_portable.ps1` 和 `tools/check_whisper_runtime.py`；后者会读取真实用户配置，运行检查改用隔离配置。沿用本计划和 `README_VOICE_TRANSLATOR.md` 的结构说明，无需新增文档体系或依赖。
 - 接口：`AppConfig` 保留 `asr_whisper_model_path`、`asr_whisper_extra_args` 及通用转录设置，删除后端选择、Qwen 专属字段与多后端选择方法；`CrispASREngine` 固定 Whisper，不接受后端、Aligner 或 LID 参数。
 - 并行批次：`asr_core` 独占 `app/core/crispasr_engine.py`、`app/core/pipeline.py`、`app/core/language_detection.py` 及对应引擎/管线/语言/LID 测试；`asr_ui` 独占 `app/views/settings_interfaces.py`、`app/views/home_interface.py` 及设置/首页测试；主 agent 独占 `app/config.py`、`tests/test_config.py`、便携包模板、计划和使用文档。子任务不操作 Git 或安装。
@@ -14,8 +14,9 @@
 - 界面与审查：使用隔离的旧 Qwen 配置完成 `MainWindow` 启动、Whisper 设置渲染、关闭保存及翻译设置保留冒烟；截图位于 `build/test-remove-qwen-asr/whisper-settings.png`。`asr_ui` 独立审查未参与编写的配置/核心/工具并复核历史迁移契约，未发现阻塞缺陷。
 - 证据边界：当前源码目录缺少 CrispASR 可执行文件与 Whisper 权重，未实跑模型推理、GPU 或真实进程取消；未构建或安装新版 EXE。测试中的识别/翻译使用模拟引擎。主窗口证据为 offscreen 渲染，首次缺少字体，显式加载系统字体后重新检查通过，不代表可见窗口环境实测。
 - 执行修正：首次 pytest 的 `--basetemp` 父目录不存在导致夹具创建失败，创建父目录后基线通过；新增字幕测试的枚举名曾误写为 `ORIGINAL`，改为现有 `SOURCE_ONLY` 后通过。此类运行准备问题不记为产品缺陷。
-- 文档与整理：维护原有计划、README、模型指南及来源说明；工具和结构入口已核对。保留本次最终测试报告与界面证据，临时测试夹具在交付前清理；用户模型、实际配置和旧发布包未改动。现有开发流程已能覆盖本次操作，无新增领域 skill。
-- 状态：源码实现、回归和独立审查完成，进入 Git 提交与主线同步；最终提交以 Git 记录为准。
+- 文档与整理：维护原有计划、README、模型指南及来源说明；工具和结构入口已核对。保留最终测试报告、界面证据和可重跑的冒烟脚本。临时夹具清理先因检测到符号链接停止，核实 80 个链接均为 pytest 生成且目标在本次夹具目录内后，仅删除链接本身，再清理 7 个已完成测试目标；用户模型、实际配置和旧发布包未改动。现有开发流程已能覆盖本次操作，无新增领域 skill。
+- Git 结果：实现候选 `1516dd91240c604a3679a7105e9bac65ffa1a724` 已提交到本地 `test` 并快进合入本地 `main`，两分支源码树一致；本段为随后的纯文档交付记录，不改变已测程序。推送在执行前被自动审批拒绝，理由是公开仓库未获针对本次源码内容的明确发布授权，未改用其他通道绕过。远端最后只读核实的 `main` 为 `8f27064d9a194a4867dd41b1db436031a5081873`，尚无远端 `test`。
+- 状态：本地源码实现、回归、审查与主线合入完成；待用户明确允许向现有公开仓库推送后，仅补远端核对和普通同步。未构建、发布或安装新版本。
 
 ## 1. 项目定位
 
