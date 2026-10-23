@@ -2,16 +2,20 @@
 
 ## 当前更新：前端显示检查与修复（2026-10-23）
 
+- 推送与 Tools 同步续作（2026-10-24）：已完成用户明确授权的推送及 `D:\Tools\VoiceTranslator` 更新，固定制品来源 `f66e3a3`，安装前实时核实远端 `main` / `test` 均为该候选。复用已审查的增量构建、同步工具及构建 venv，从 Git 导出的 69 个文件与源码逐字节一致；24 个有效 app 模块及 main 包内代码一致，全部依赖代码不变，仅 4 个前端模块变化。主 agent 串行负责 Git、构建和安装，`frontend_install_audit` 独立核验保留文件，`frontend_package_probe` 核验冻结包并准备启动脚本。详细证据及复跑/回退入口：`build/sync-ui-f66e3a3/records/DELIVERY.md`。
+- Tools 保留与验证：仅替换 `VoiceTranslator.exe`、`_internal/base_library.zip` 和 `package-manifest.json`，0 新增/删除；全部 1,760 文件匹配清单，其余 1,757 文件原哈希不变。独立复核 735 个保护文件，包括原配置、5 份历史配置、6 个模型及 native runtime/独立 separator，均逐字节保留；不执行配置迁移。新 EXE SHA-256：`62362ee212fbb8cf3c16d0567dd1eca9558ab9e8030424168e6bcf4414892088`，旧三文件经哈希校验保存在 `build/sync-ui-f66e3a3/backup/`。
+- Tools 启动边界：候选使用隔离 APPDATA、实际安装使用原 portable 配置，分别 Hidden 启动观察 12 秒，存活、响应、InputIdle 及仅本次进程清理通过；实际安装配置前后 SHA-256 均为 `2042f5a82ffda370213762f312faa1392a51f847efa517144ea6a25e300d2920`。隐藏启动没有可见窗口截图或模型推理证据；前端视觉结论来自下述源码 Qt 渲染回归，本轮未重跑音视频推理。构建中间目录及临时源码 ZIP 已清理，保留当前候选、备份、脚本与报告；其他任务产物不动。
+
 - 目标：自行复现并修复首页、设置页在深浅主题、900×640 至默认窗口和 80%–200% 字体比例下的显示问题；保留文件导入、任务模式、设置保存和处理管线行为。实际问题及根因以渲染/布局证据确认，不进行无关视觉重设计。
-- 基线与交付：初始工作区干净，`main` / `test` 均为 `f16ec5b`，在现有 `test` 实施；主 agent 负责本任务集成和本地主线交付。执行中发现另一会话已同步旧候选并准备 Tools 安装，协作调整为共享目录、各自固定候选与独立输出；其计划记录保持原样且不夹入本任务提交。本次交付前端源码，不接管该会话的推送或安装工作。
+- 基线与交付：初始工作区干净，`main` / `test` 均为 `f16ec5b`，在现有 `test` 实施；主 agent 负责本任务集成和本地主线交付。执行中发现另一会话已同步旧候选并准备 Tools 安装，协作调整为共享目录、各自固定候选与独立输出；其计划记录保持原样且不夹入本任务提交。源码修复阶段先完成前端本地交付；本轮按用户后续授权推送并更新该安装。
 - 资源：复用 `app/views/`、`app/ui_scale.py`、现有 pytest、`build/test-remove-qwen-asr/scripts/ui_smoke.py` 的隔离配置/字体加载方式及 README 结构索引。界面证据和测试输出统一放 `build/test-ui-display/`，不读取或改写实际用户配置，不启动模型推理。
 - 分工：同批 `home_display` 独占首页与首页回归，`settings_display` 独占设置页及设置显示回归；先调查并回报根因，主 agent 完成基线截图后通知实施。主 agent 独占字体比例、主窗口、集成渲染脚本、计划和文档；公共字体/主题接口由主 agent 协调，子任务不操作 Git 或安装。
 - 验收：真实 Qt 控件渲染与尺寸检查覆盖主题、缩放、最小窗口、滚动可达及主题即时切换；为已证实的行为故障添加必要回归，运行完整 pytest 与差异检查。区分 offscreen、Windows 平台渲染和打包/安装验证，未覆盖项如实记录。
 - 根因与实现：原生 Qt 标签/字段/表格未跟随 Fluent 深色主题，且 QSS 容器阻断实时颜色和字体继承；主 agent 统一使用 Fusion/主题调色板，跨样式容器同步颜色，分别缩放 Qt 点字体与 Fluent 像素字体并保存基准，避免重复累乘。`home_display` 为首页增加透明滚动容器、原生下拉菜单和表格自适应行/列；`settings_display` 处理长表单换行、只读可复制模型规格及 API 模型名撑宽页面的问题。
 - 验证：最终 `python -X utf8 -m pytest -p no:cacheprovider --basetemp build/test-ui-display/verified --junitxml build/test-ui-display/verified.xml`：**91 passed in 9.92s**。首页 8 项覆盖缩放、下拉鼠标选择、拖放穿过滚动视口、重复导入和删除，设置/背景定向 13 项通过。真实设置保存循环覆盖浅色→深色→浅色与 80%/125%/200%，27 个设置页检查无水平溢出且保存可达；同窗口字体反复切换、主题反复切换及最终绘制像素均通过。主 agent 复核全部实现，`settings_display` 独立检查公共字体/主题未发现阻塞问题。
-- 渲染与边界：保留 `build/test-ui-display/baseline-opaque/` 修复前证据、`home/` 和 `settings/` 最小窗口最终证据、`default-size/` 默认窗口矩阵、`native/` 的 Windows QPA 启动与窗口截图。Mica 由 Windows DWM 合成，Qt 窗口截图不能证明完整系统背景；初次透明截图造成白底假象，已用官方不透明 fallback 复核，真正缺陷为深色底上的原生黑色标签/白色输入控件。未改用户配置、运行模型推理、构建或替换 EXE。
+- 渲染与边界：保留 `build/test-ui-display/baseline-opaque/` 修复前证据、`home/` 和 `settings/` 最小窗口最终证据、`default-size/` 默认窗口矩阵、`native/` 的 Windows QPA 启动与窗口截图。Mica 由 Windows DWM 合成，Qt 窗口截图不能证明完整系统背景；初次透明截图造成白底假象，已用官方不透明 fallback 复核，真正缺陷为深色底上的原生黑色标签/白色输入控件。源码阶段未运行模型推理或构建安装；续作的安装证据见本节开头，用户配置仍逐字节保留。
 - 文档与整理：README 补充滚动、长模型名及字体入口；现有结构说明可复用，无新增依赖或领域 skill。可重跑渲染脚本位于 `build/test-ui-display/scripts/render_ui.py`，失败与最终测试报告分别保留，清理本任务已被最终证据替代的截图和隔离基线源码。
-- 状态：源码修复、回归与独立复核完成。交付采用本地 `test` 候选与 `main` 快进；另一会话仍在更新共享计划，因此保持当前 `test` checkout、仅暂存本任务计划段。提交、两分支一致性及未提交记录保留情况存于 `build/test-ui-display/delivery.json`。远端只读核实两分支仍为 `f16ec5b`，本次不推送或安装。
+- 状态：源码修复、回归与独立复核完成。交付采用本地 `test` 候选与 `main` 快进；另一会话仍在更新共享计划，因此保持当前 `test` checkout、仅暂存本任务计划段。提交、两分支一致性及未提交记录保留情况存于 `build/test-ui-display/delivery.json`。源码阶段未推送或安装；本轮已完成以上同步。安装制品来源与后续纯交付记录提交分别记录，程序内容未变无需重建。
 
 ## 当前更新：移除 Qwen ASR 支持（2026-10-23）
 
